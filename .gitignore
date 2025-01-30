@@ -4,6 +4,9 @@
 #Ignore all .mod files
 *.mod
 
+#Ignore all .smod files
+*.smod
+
 #Ignore all .so files
 *.so
 

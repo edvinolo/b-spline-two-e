@@ -20,7 +20,7 @@ subroutine generate_grid(k,m,Z,h_max,r_max,grid)
     N_grid = 2*k + m + ceiling(r_max/h)
     allocate(grid(N_grid))
 
-    ! zero boundary conditions at origin
+    ! 
     grid(1:k) = 0.d0
 
     ! Small linear spacing
@@ -43,7 +43,7 @@ subroutine generate_grid(k,m,Z,h_max,r_max,grid)
         i = i + 1
     end do
 
-    ! zero boundary conditions at max radial box
+    ! 
     grid(i+1:i+k-1) = grid(i)
 
     N_grid = i+k-1
