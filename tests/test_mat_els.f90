@@ -14,8 +14,10 @@ program mat_els_test
     double complex, dimension(:,:), allocatable :: H,S,vecs
     double complex, dimension(:), allocatable :: eigs
     double precision, dimension(:), allocatable :: eigs_real
-    double precision, dimension(:,:,:,:), allocatable :: r_k,r_m_k
-    double precision, dimension(:,:,:,:,:,:), allocatable :: r_d_k
+    !double precision, dimension(:,:,:,:), allocatable :: r_k,r_m_k
+    !double precision, dimension(:,:,:,:,:,:), allocatable :: r_d_k
+    type(sparse_4d) :: r_k,r_m_k
+    type(sparse_6d) :: r_d_k
     double precision :: diag_sum,off_diag_sum
     double complex :: test_int
     integer :: i_b,j_b,i_b_p,j_b_p,i_gs
@@ -34,7 +36,7 @@ program mat_els_test
     m = 3
     Z = 1
     h_max = 0.5d0
-    r_max = 10.d0
+    r_max = 80.d0
     call generate_grid(k,m,Z,h_max,r_max,grid)
     call splines%init(k,grid)
 
@@ -49,18 +51,17 @@ program mat_els_test
     call setup_H_one_particle(pot,l,splines,H,S)
 
     max_k = 0
-    allocate(r_k(0:max_k,size(splines%breakpoints)-1,splines%n_b,splines%n_b))
-    allocate(r_m_k(0:max_k,size(splines%breakpoints)-1,splines%n_b,splines%n_b))
-    allocate(r_d_k(0:max_k,size(splines%breakpoints)-1,splines%n_b,splines%n_b,splines%n_b,splines%n_b))
-    r_k = 0.d0
-    r_m_k = 0.d0
-    r_d_k = 0.d0
+    ! allocate(r_k(0:max_k,size(splines%breakpoints)-1,splines%n_b,splines%n_b))
+    ! allocate(r_m_k(0:max_k,size(splines%breakpoints)-1,splines%n_b,splines%n_b))
+    ! allocate(r_d_k(0:max_k,size(splines%breakpoints)-1,splines%n_b,splines%n_b,splines%n_b,splines%n_b))
+    !r_k = 0.d0
+    !r_m_k = 0.d0
+    !r_d_k = 0.d0
+    call r_k%init(max_k,splines)
+    call r_m_k%init(max_k,splines)
+    call r_d_k%init(max_k,splines)
     k_GL = splines%k + 3
     call setup_Slater_integrals(splines,max_k,k_GL,r_k,r_m_k,r_d_k)
-
-    write(6,*) r_k(0,1,1,1)
-    write(6,*) r_m_k(0,1,1,1)
-    write(6,*) r_d_k(0,1,1,1,1,1)
 
     allocate(eigs(splines%n_b),eigs_real(splines%n_b))
 
@@ -89,7 +90,7 @@ program mat_els_test
     call eig_general(H,S,eigs,vecs)
 
     do i = 1,splines%n_b
-        eigs_real(i) = abs(eigs(i)+2.0d0)
+        eigs_real(i) = abs(eigs(i)+0.5d0)
     end do
 
     index_gs = minloc(eigs_real)
@@ -98,30 +99,49 @@ program mat_els_test
     write(6,*) eigs(i_gs)
 
     test_int = 0.d0
-    do j_b_p = 1, splines%n_b
-        do i_b_p = 1, splines%n_b
-            do j_b = 1, splines%n_b
-                if (abs(j_b-j_b_p)>=splines%k) cycle
-                do i_b = 1,splines%n_b
-                    if (abs(i_b-i_b_p) >= splines%k) cycle
-                    diag_sum = 0.d0
-                    off_diag_sum = 0.d0
-                    do i = 1,size(splines%breakpoints)-1
-                        diag_sum = diag_sum + r_d_k(0,i,i_b,j_b,i_b_p,j_b_p) + r_d_k(0,i,j_b,i_b,j_b_p,i_b_p)
-                        do j = 1,size(splines%breakpoints)-1
-                            if (i<j) then
-                                off_diag_sum = off_diag_sum + r_k(0,i,i_b,i_b_p)*r_m_k(0,j,j_b,j_b_p)
-                            else if (j<i) then
-                                off_diag_sum = off_diag_sum + r_k(0,j,j_b,j_b_p)*r_m_k(0,i,i_b,i_b_p)
-                            end if
-                        end do
-                    end do
-                    test_int = test_int + vecs(i_b,i_gs)*vecs(j_b,i_gs)*vecs(i_b_p,i_gs)*vecs(j_b_p,i_gs)&
-                            *(diag_sum+off_diag_sum)
-                end do
-            end do
+    do i = 1,r_d_k%nnz
+        test_int = test_int + vecs(r_d_k%i(i),i_gs)*vecs(r_d_k%j(i),i_gs)*&
+                            vecs(r_d_k%i_p(i),i_gs)*vecs(r_d_k%j_p(i),i_gs)*r_d_k%data(i)
+
+        ! test_int = test_int + vecs(r_d_k%j(i),i_gs)*vecs(r_d_k%i(i),i_gs)*&
+        ! vecs(r_d_k%i_p(i),i_gs)*vecs(r_d_k%j_p(i),i_gs)*r_d_k%data(i)
+    end do
+    test_int = 2.d0*test_int
+
+    do i = 1,r_k%nnz
+        do j = 1,r_k%nnz
+            off_diag_sum = 0.d0
+            if (r_k%iv(i)<r_k%iv(j)) then
+                off_diag_sum = r_k%data(i)*r_m_k%data(j)
+            end if
+            test_int = test_int + 2.d0*off_diag_sum*vecs(r_k%i(i),i_gs)*vecs(r_k%i(j),i_gs)*&
+                        vecs(r_k%j(i),i_gs)*vecs(r_k%j(j),i_gs)
         end do
     end do
+    ! do j_b_p = 1, splines%n_b
+    !     do i_b_p = 1, splines%n_b
+    !         do j_b = 1, splines%n_b
+    !             if (abs(j_b-j_b_p)>=splines%k) cycle
+    !             do i_b = 1,splines%n_b
+    !                 if (abs(i_b-i_b_p) >= splines%k) cycle
+    !                 diag_sum = 0.d0
+    !                 off_diag_sum = 0.d0
+    !                 do i = 1,size(splines%breakpoints)-1
+    !                     diag_sum = diag_sum + r_d_k(0,i,i_b,j_b,i_b_p,j_b_p) + r_d_k(0,i,j_b,i_b,j_b_p,i_b_p)
+    !                     do j = 1,size(splines%breakpoints)-1
+    !                         if (i<j) then
+    !                             off_diag_sum = off_diag_sum + r_k(0,i,i_b,i_b_p)*r_m_k(0,j,j_b,j_b_p)
+    !                         else if (j<i) then
+    !                             off_diag_sum = off_diag_sum + r_k(0,j,j_b,j_b_p)*r_m_k(0,i,i_b,i_b_p)
+    !                         end if
+    !                     end do
+    !                 end do
+    !                 test_int = test_int + vecs(i_b,i_gs)*vecs(j_b,i_gs)*vecs(i_b_p,i_gs)*vecs(j_b_p,i_gs)&
+    !                         *(diag_sum+off_diag_sum)
+    !             end do
+    !         end do
+    !     end do
+    ! end do
     write(6,*) test_int,test_int/0.625d0
 
     !plot the 1s orbital
