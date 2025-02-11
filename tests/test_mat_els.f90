@@ -3,6 +3,7 @@ program mat_els_test
     use bspline_tools
     use eig_tools
     use potentials
+    use CAP_tools
     use mat_els
     use stdlib_linalg, only: eig,eigvals,linalg_state_type
     use stdlib_sorting, only: sort
@@ -32,6 +33,11 @@ program mat_els_test
     type(b_spline) :: splines
     type(hydrogenic) :: pot
 
+    type(CAP) :: CAP_c
+    integer :: CAP_order = 2
+    double precision :: CAP_r_0 = 60.d0
+    double complex :: CAP_eta = dcmplx(1.d-3,0.d0)
+
     k = 8
     m = 3
     Z = 1
@@ -39,6 +45,8 @@ program mat_els_test
     r_max = 80.d0
     call generate_grid(k,m,Z,h_max,r_max,grid)
     call splines%init(k,grid)
+
+    call CAP_c%init(CAP_order,CAP_r_0,CAP_eta)
 
     call pot%init(Z)
     l = 0
@@ -48,7 +56,7 @@ program mat_els_test
     S = 0.d0
     vecs = 0.d0
 
-    call setup_H_one_particle(pot,l,splines,H,S)
+    call setup_H_one_particle(pot,CAP_c,l,splines,H,S)
 
     max_k = 0
     ! allocate(r_k(0:max_k,size(splines%breakpoints)-1,splines%n_b,splines%n_b))
@@ -98,10 +106,11 @@ program mat_els_test
 
     write(6,*) eigs(i_gs)
 
+
     test_int = 0.d0
     do i = 1,r_d_k%nnz
         test_int = test_int + vecs(r_d_k%i(i),i_gs)*vecs(r_d_k%j(i),i_gs)*&
-                            vecs(r_d_k%i_p(i),i_gs)*vecs(r_d_k%j_p(i),i_gs)*r_d_k%data(i)
+                            vecs(r_d_k%i_p(i),i_gs)*vecs(r_d_k%j_p(i),i_gs)*r_d_k%data(i,0)
 
         ! test_int = test_int + vecs(r_d_k%j(i),i_gs)*vecs(r_d_k%i(i),i_gs)*&
         ! vecs(r_d_k%i_p(i),i_gs)*vecs(r_d_k%j_p(i),i_gs)*r_d_k%data(i)
@@ -112,37 +121,30 @@ program mat_els_test
         do j = 1,r_k%nnz
             off_diag_sum = 0.d0
             if (r_k%iv(i)<r_k%iv(j)) then
-                off_diag_sum = r_k%data(i)*r_m_k%data(j)
+                off_diag_sum = r_k%data(i,0)*r_m_k%data(j,0)
             end if
             test_int = test_int + 2.d0*off_diag_sum*vecs(r_k%i(i),i_gs)*vecs(r_k%i(j),i_gs)*&
                         vecs(r_k%j(i),i_gs)*vecs(r_k%j(j),i_gs)
         end do
     end do
-    ! do j_b_p = 1, splines%n_b
-    !     do i_b_p = 1, splines%n_b
-    !         do j_b = 1, splines%n_b
-    !             if (abs(j_b-j_b_p)>=splines%k) cycle
-    !             do i_b = 1,splines%n_b
-    !                 if (abs(i_b-i_b_p) >= splines%k) cycle
-    !                 diag_sum = 0.d0
-    !                 off_diag_sum = 0.d0
-    !                 do i = 1,size(splines%breakpoints)-1
-    !                     diag_sum = diag_sum + r_d_k(0,i,i_b,j_b,i_b_p,j_b_p) + r_d_k(0,i,j_b,i_b,j_b_p,i_b_p)
-    !                     do j = 1,size(splines%breakpoints)-1
-    !                         if (i<j) then
-    !                             off_diag_sum = off_diag_sum + r_k(0,i,i_b,i_b_p)*r_m_k(0,j,j_b,j_b_p)
-    !                         else if (j<i) then
-    !                             off_diag_sum = off_diag_sum + r_k(0,j,j_b,j_b_p)*r_m_k(0,i,i_b,i_b_p)
-    !                         end if
-    !                     end do
-    !                 end do
-    !                 test_int = test_int + vecs(i_b,i_gs)*vecs(j_b,i_gs)*vecs(i_b_p,i_gs)*vecs(j_b_p,i_gs)&
-    !                         *(diag_sum+off_diag_sum)
-    !             end do
-    !         end do
-    !     end do
-    ! end do
     write(6,*) test_int,test_int/0.625d0
+    test_int = Slater_k(splines%n_b,vecs(:,i_gs),vecs(:,i_gs),vecs(:,i_gs),vecs(:,i_gs),0,r_d_k,r_k,r_m_k)
+    write(6,*) test_int,test_int/0.625d0
+
+    l = 1
+    H = 0.d0
+    S = 0.d0
+    call setup_H_one_particle(pot,CAP_c,l,splines,H,S)
+    call eig_general(H,S,eigs,vecs)
+
+    do i = 1,splines%n_b
+        eigs_real(i) = abs(eigs(i)+0.375d0)
+    end do
+
+    index_gs = minloc(eigs_real)
+    i_gs = index_gs(1)
+
+    write(6,*) eigs(i_gs)
 
     !plot the 1s orbital
     allocate(r(1101),vals(1101),c(splines%n))

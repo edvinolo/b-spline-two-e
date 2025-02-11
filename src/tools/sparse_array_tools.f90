@@ -4,9 +4,8 @@ module sparse_array_tools
 
     type, public :: sparse_4d
     integer :: nnz
-    double precision, dimension(:), allocatable :: data
+    double precision, dimension(:,:), allocatable :: data
     integer, dimension(:), allocatable :: iv
-    integer, dimension(:), allocatable :: k
     integer, dimension(:), allocatable :: i
     integer, dimension(:), allocatable :: j
     contains
@@ -16,9 +15,8 @@ module sparse_array_tools
 
     type, public :: sparse_6d
         integer :: nnz
-        double precision, dimension(:), allocatable :: data
+        double precision, dimension(:,:), allocatable :: data
         integer, dimension(:), allocatable :: iv
-        integer, dimension(:), allocatable :: k
         integer, dimension(:), allocatable :: i
         integer, dimension(:), allocatable :: j
         integer, dimension(:), allocatable :: i_p
@@ -34,9 +32,9 @@ contains
         integer, intent(in) ::  max_k
         type(b_spline), intent(in) :: b_splines
 
-        call count_nnz_4d(this,max_k,b_splines)
-        allocate(this%data(this%nnz),source=0.d0)
-        allocate(this%k(this%nnz),this%iv(this%nnz),this%i(this%nnz),this%j(this%nnz),source = 0)
+        call count_nnz_4d(this,b_splines)
+        allocate(this%data(this%nnz,0:max_k),source=0.d0)
+        allocate(this%iv(this%nnz),this%i(this%nnz),this%j(this%nnz),source = 0)
     end subroutine init_4d
 
     subroutine init_6d(this,max_k,b_splines)
@@ -44,15 +42,14 @@ contains
         integer, intent(in) ::  max_k
         type(b_spline), intent(in) :: b_splines
 
-        call count_nnz_6d(this,max_k,b_splines)
-        allocate(this%data(this%nnz),source=0.d0)
-        allocate(this%k(this%nnz),this%iv(this%nnz),this%i(this%nnz),&
+        call count_nnz_6d(this,b_splines)
+        allocate(this%data(this%nnz,0:max_k),source=0.d0)
+        allocate(this%iv(this%nnz),this%i(this%nnz),&
                 this%j(this%nnz),this%i_p(this%nnz),this%j_p(this%nnz),source = 0)
     end subroutine init_6d
 
-    subroutine count_nnz_4d(this, max_k,b_splines)
+    subroutine count_nnz_4d(this, b_splines)
         class(sparse_4d), intent(inout) :: this
-        integer, intent(in) ::  max_k
         type(b_spline), intent(in) :: b_splines
 
         integer :: i,j,iv
@@ -71,13 +68,10 @@ contains
                 end do
             end do
         end do
-
-        this%nnz = (max_k+1)*this%nnz
     end subroutine count_nnz_4d
 
-    subroutine count_nnz_6d(this, max_k,b_splines)
+    subroutine count_nnz_6d(this, b_splines)
         class(sparse_6d), intent(inout) :: this
-        integer, intent(in) ::  max_k
         type(b_spline), intent(in) :: b_splines
 
         integer :: i,j,i_p,j_p,iv
@@ -102,7 +96,5 @@ contains
                 end do
             end do
         end do
-
-        this%nnz = (max_k+1)*this%nnz
     end subroutine count_nnz_6d
 end module sparse_array_tools
