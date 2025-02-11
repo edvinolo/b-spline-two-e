@@ -50,7 +50,6 @@ contains
         type(b_spline), intent(in) :: b_splines
         integer, intent(in) :: k_GL
         double complex, dimension(:,:), intent(out) ::  S
-    
 
         integer :: i_b,j_b,i_r
         double precision, dimension(:), allocatable :: c_i,c_j
@@ -80,7 +79,6 @@ contains
                 end do
             end do
         end do
-        
     end subroutine setup_S
 
     subroutine setup_Slater_integrals(b_splines,max_k,k_GL,r_k,r_m_k,r_d_k)
