@@ -1,6 +1,7 @@
 module eig_tools
     use stdlib_linalg_lapack, only: ggev
     use stdlib_linalg_blas, only: dotc,dotu,gemv
+    use stdlib_sorting, only: sort_index
     use iso_fortran_env, only: stderr => error_unit
     implicit none
 
@@ -59,4 +60,22 @@ contains
         end do
 
     end subroutine eig_general
+
+    ! Sort eigenvalues and eigenvector based on the real part of the eigenvalues
+    subroutine sort_eig(n_b,eigs,vecs)
+        integer, intent(in) :: n_b
+        double complex, dimension(n_b), intent(inout) :: eigs
+        double complex, dimension(n_b,n_b), intent(inout) ::  vecs
+
+        integer, dimension(n_b) :: index
+        double precision, dimension(n_b) :: eigs_real
+        
+        eigs_real = real(eigs)
+
+        call sort_index(eigs_real,index)
+
+        eigs = eigs(index)
+        vecs = vecs(:,index)
+
+    end subroutine sort_eig
 end module eig_tools

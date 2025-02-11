@@ -97,6 +97,7 @@ program mat_els_test
 
     !call eig(H,S,eigs,right=vecs,err=err)
     call eig_general(H,S,eigs,vecs)
+    call sort_eig(splines%n_b,eigs,vecs)
 
     open(unit=1,file="eigs.dat")
     do i = 1,splines%n_b
@@ -108,7 +109,7 @@ program mat_els_test
     index_gs = minloc(eigs_real)
     i_gs = index_gs(1)
 
-    write(6,*) eigs(i_gs)
+    write(6,*) eigs(i_gs),i_gs
 
 
     test_int = 0.d0
