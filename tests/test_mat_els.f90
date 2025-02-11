@@ -1,10 +1,12 @@
 program mat_els_test
     use grid_tools
     use bspline_tools
+    use block_tools
     use eig_tools
     use potentials
     use CAP_tools
     use mat_els
+    use orbitals
     use stdlib_linalg, only: eig,eigvals,linalg_state_type
     use stdlib_sorting, only: sort
     implicit none
@@ -24,6 +26,9 @@ program mat_els_test
     integer :: i_b,j_b,i_b_p,j_b_p,i_gs
     integer, dimension(1) :: index_gs
     type(linalg_state_type) :: err
+
+    double complex, dimension(:,:), allocatable :: eigs_v
+    type(block), dimension(:), allocatable :: vecs_v
 
     !for ploting orbitals
     double complex, dimension(:), allocatable :: vals
@@ -172,5 +177,8 @@ program mat_els_test
         write(1,*) r(i), -real(vals(i)), aimag(vals(i)), 2.d0*r(i)*exp(-r(i))
     end do
     close(1)
+
+    allocate(eigs_v(splines%n_b,0:4),vecs_v(0:4))
+    call find_orbitals(splines,k_GL,pot,CAP_c,4,eigs_v,vecs_v)
 
 end program mat_els_test

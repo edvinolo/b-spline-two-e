@@ -10,7 +10,7 @@ contains
     ! Requires copying B, since it is destroyed by ggev
     subroutine eig_general(A,B,eigs,vecs)
         double complex, dimension(:,:), intent(inout) :: A
-        double complex, dimension(:,:), intent(inout) :: B
+        double complex, dimension(:,:), intent(in) :: B
         double complex, dimension(:), intent(out) :: eigs
         double complex, dimension(:,:), intent(out) :: vecs
 
@@ -36,13 +36,13 @@ contains
         allocate(B_copy(N,N))
         B_copy = B
 
-        call ggev(jobvl,jobvr,N,A,N,B,N,alpha,beta,vl,N,vecs,N,work,lwork,rwork,info)
+        call ggev(jobvl,jobvr,N,A,N,B_copy,N,alpha,beta,vl,N,vecs,N,work,lwork,rwork,info)
 
         lwork = int(work(1))
         deallocate(work)
         allocate(work(lwork))
 
-        call ggev(jobvl,jobvr,N,A,N,B,N,alpha,beta,vl,N,vecs,N,work,lwork,rwork,info)
+        call ggev(jobvl,jobvr,N,A,N,B_copy,N,alpha,beta,vl,N,vecs,N,work,lwork,rwork,info)
 
         if (info /= 0) then
             write(stderr,*) "zggev exited with info: ", info
@@ -55,11 +55,30 @@ contains
         allocate(temp_v(N))
         ! Normalize the eigenvectors
         do i=1,N
-            call gemv('N',N,N,dcmplx(1.d0,0.d0),B_copy,N,vecs(:,i),1,dcmplx(0.d0,0.d0),temp_v,1)
+            call gemv('N',N,N,dcmplx(1.d0,0.d0),B,N,vecs(:,i),1,dcmplx(0.d0,0.d0),temp_v,1)
             vecs(:,i) = vecs(:,i)/sqrt(dotu(N,vecs(:,i),1,temp_v,1))
         end do
 
     end subroutine eig_general
+
+    subroutine B_normalize(B,vecs)
+        double complex, dimension(:,:), intent(in) :: B
+        double complex, dimension(:,:), intent(out) ::  vecs
+
+        integer :: i,N
+        integer, dimension(2) :: N_2
+        double complex, dimension(:), allocatable :: temp_V
+
+        N_2 = shape(B)
+        N = N_2(1)
+        allocate(temp_V(N))
+        ! Normalize the eigenvectors
+        do i=1,N
+            call gemv('N',N,N,dcmplx(1.d0,0.d0),B,N,vecs(:,i),1,dcmplx(0.d0,0.d0),temp_v,1)
+            vecs(:,i) = vecs(:,i)/sqrt(dotu(N,vecs(:,i),1,temp_v,1))
+        end do
+
+    end subroutine B_normalize
 
     ! Sort eigenvalues and eigenvector based on the real part of the eigenvalues
     subroutine sort_eig(n_b,eigs,vecs)
