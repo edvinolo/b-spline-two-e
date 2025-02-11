@@ -43,6 +43,7 @@ program mat_els_test
     Z = 1
     h_max = 0.5d0
     r_max = 80.d0
+    k_GL = splines%k + 6
     call generate_grid(k,m,Z,h_max,r_max,grid)
     call splines%init(k,grid)
 
@@ -56,7 +57,8 @@ program mat_els_test
     S = 0.d0
     vecs = 0.d0
 
-    call setup_H_one_particle(pot,CAP_c,l,splines,H,S)
+    call setup_H_one_particle(pot,CAP_c,l,splines,k_GL,H)
+    call setup_S(splines,k_GL,S)
 
     max_k = 0
     ! allocate(r_k(0:max_k,size(splines%breakpoints)-1,splines%n_b,splines%n_b))
@@ -68,7 +70,6 @@ program mat_els_test
     call r_k%init(max_k,splines)
     call r_m_k%init(max_k,splines)
     call r_d_k%init(max_k,splines)
-    k_GL = splines%k + 3
     call setup_Slater_integrals(splines,max_k,k_GL,r_k,r_m_k,r_d_k)
 
     allocate(eigs(splines%n_b),eigs_real(splines%n_b))
@@ -97,9 +98,12 @@ program mat_els_test
     !call eig(H,S,eigs,right=vecs,err=err)
     call eig_general(H,S,eigs,vecs)
 
+    open(unit=1,file="eigs.dat")
     do i = 1,splines%n_b
         eigs_real(i) = abs(eigs(i)+0.5d0)
+        write(1,*) real(eigs(i)),aimag(eigs(i))
     end do
+    close(1)
 
     index_gs = minloc(eigs_real)
     i_gs = index_gs(1)
@@ -134,7 +138,8 @@ program mat_els_test
     l = 1
     H = 0.d0
     S = 0.d0
-    call setup_H_one_particle(pot,CAP_c,l,splines,H,S)
+    call setup_H_one_particle(pot,CAP_c,l,splines,k_GL,H)
+    call setup_S(splines,k_GL,S)
     call eig_general(H,S,eigs,vecs)
 
     do i = 1,splines%n_b

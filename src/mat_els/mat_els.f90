@@ -8,21 +8,18 @@ module mat_els
     implicit none
 
 contains
-    subroutine setup_H_one_particle(potential,CAP_c,l,b_splines,H,S)
+    subroutine setup_H_one_particle(potential,CAP_c,l,b_splines,k_GL,H)
         class(sph_pot), intent(in) :: potential
         class(CAP), intent(in) :: CAP_c
         integer, intent(in) :: l
         type(b_spline), intent(in) :: b_splines
+        integer, intent(in) :: k_GL
         double complex, dimension(:,:), intent(out) :: H
-        double complex, dimension(:,:), intent(out) :: S
 
         integer :: i_b,j_b,i_r
-        integer :: k_GL
         double precision, dimension(:), allocatable :: c_i,c_j
         type(gau_leg) :: g_l
 
-        ! k_GL = 2*b_splines%k-2 ! exact for overlap
-        k_GL = b_splines%k + 3
         call g_l%init(b_splines%breakpoints,k_GL)
         allocate(c_i(b_splines%n),c_j(b_splines%n))
         c_j = 0.d0
@@ -42,12 +39,49 @@ contains
 
                 do i_r = 1, size(b_splines%breakpoints)-1
                     if (b_splines%support(i_r,i_b+1).and.b_splines%support(i_r,j_b+1)) then
-                        call compute_H_and_S(potential,CAP_c,l,b_splines,i_b,j_b,c_i,c_j,k_GL,g_l%x(:,i_r),g_l%w(:,i_r),H,S)
+                        call compute_H(potential,CAP_c,l,b_splines,i_b,j_b,c_i,c_j,k_GL,g_l%x(:,i_r),g_l%w(:,i_r),H)
                     end if
                 end do
             end do
         end do
     end subroutine setup_H_one_particle
+
+    subroutine setup_S(b_splines,k_GL,S)
+        type(b_spline), intent(in) :: b_splines
+        integer, intent(in) :: k_GL
+        double complex, dimension(:,:), intent(out) ::  S
+    
+
+        integer :: i_b,j_b,i_r
+        double precision, dimension(:), allocatable :: c_i,c_j
+        type(gau_leg) :: g_l
+
+        call g_l%init(b_splines%breakpoints,k_GL)
+        allocate(c_i(b_splines%n),c_j(b_splines%n))
+        c_j = 0.d0
+
+        do j_b = 1, b_splines%n-2
+            c_j(j_b+1) = 1.d0
+            c_j(j_b) = 0.d0
+
+            c_i = 0.d0
+            do i_b = 1, b_splines%n-2
+                c_i(i_b+1) = 1.d0
+                c_i(i_b) = 0.d0
+
+                if (abs(j_b-i_b)>=b_splines%k) then
+                    cycle
+                end if
+
+                do i_r = 1, size(b_splines%breakpoints)-1
+                    if (b_splines%support(i_r,i_b+1).and.b_splines%support(i_r,j_b+1)) then
+                        call compute_S(b_splines,i_b,j_b,c_i,c_j,k_GL,g_l%x(:,i_r),g_l%w(:,i_r),S)
+                    end if
+                end do
+            end do
+        end do
+        
+    end subroutine setup_S
 
     subroutine setup_Slater_integrals(b_splines,max_k,k_GL,r_k,r_m_k,r_d_k)
         type(b_spline), intent(in) :: b_splines
@@ -169,7 +203,7 @@ contains
         end do
     end subroutine setup_Slater_diag
 
-    subroutine compute_H_and_S(potential,CAP_c,l,b_splines,i,j,c_i,c_j,k_GL,r,w,H,S)
+    subroutine compute_H(potential,CAP_c,l,b_splines,i,j,c_i,c_j,k_GL,r,w,H)
         ! This is way too many arguments. Need to think about how to do this smarter.
         class(sph_pot), intent(in) :: potential
         class(CAP), intent(in) :: CAP_c
@@ -183,7 +217,6 @@ contains
         double precision, dimension(k_GL), intent(in) :: r
         double precision, dimension(k_GL), intent(in) :: w
         double complex, dimension(:,:), intent(out) :: H
-        double complex, dimension(:,:), intent(out) :: S
 
 
         integer :: i_sum
@@ -194,10 +227,33 @@ contains
             B_j = b_splines%eval_d(r(i_sum),c_j)
             D_B_j = b_splines%d_eval_d(r(i_sum),c_j,2)
             H(i,j) = H(i,j) + w(i_sum)*(-0.5*B_i*D_B_j + (potential%V(r(i_sum),l) + CAP_c%V(r(i_sum)))*B_i*B_j)
+        end do
+
+    end subroutine compute_H
+
+    subroutine compute_S(b_splines,i,j,c_i,c_j,k_GL,r,w,S)
+        ! This is way too many arguments. Need to think about how to do this smarter.
+        type(b_spline), intent(in) :: b_splines
+        integer, intent(in) :: i
+        integer, intent(in) :: j
+        double precision, dimension(b_splines%n), intent(in) :: c_i
+        double precision, dimension(b_splines%n), intent(in) :: c_j
+        integer, intent(in) :: k_GL
+        double precision, dimension(k_GL), intent(in) :: r
+        double precision, dimension(k_GL), intent(in) :: w
+        double complex, dimension(:,:), intent(out) :: S
+
+
+        integer :: i_sum
+        double precision :: B_i, B_j
+
+        do i_sum = 1, k_GL
+            B_i = b_splines%eval_d(r(i_sum),c_i)
+            B_j = b_splines%eval_d(r(i_sum),c_j)
             S(i,j) = S(i,j) + w(i_sum)*B_i*B_j
         end do
 
-    end subroutine compute_H_and_S
+    end subroutine compute_S
 
     subroutine compute_radial_dip(b_splines,i,j,c_i,c_j,k_GL,r,w,r_mat,dr_mat)
         type(b_spline), intent(in) :: b_splines
