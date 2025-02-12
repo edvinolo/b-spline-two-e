@@ -77,4 +77,18 @@ contains
         end if
     end function X_k
 
+    pure function ang_k_LS(k,orbs,L) result(res)
+        integer, intent(in) :: k
+        type(orbital), dimension(4), intent(in) :: orbs
+        integer, intent(in) :: L
+        double precision :: res
+
+        if ((mod(orbs(1)%l+k+orbs(3)%l,2) /= 0).or.(mod(orbs(2)%l+k+orbs(4)%l,2) /= 0)) then
+            res = 0.d0
+        else
+            res = (-1)**(orbs(2)%l+orbs(3)%l+L)*six_j(orbs(1)%l,orbs(2)%l,L,orbs(3)%l,orbs(4)%l,k) &
+                *C_red_mat(k,orbs(1)%l,orbs(3)%l)*C_red_mat(k,orbs(2)%l,orbs(4)%l)
+        end if
+    end function ang_k_LS
+
 end module wigner_tools
