@@ -29,8 +29,9 @@ contains
         this%m = m
         this%nz = nz
 
-        if (this%nz) allocate(this%data(n,m))
-        this%data = 0.d0
+        if (this%nz) then
+            allocate(this%data(n,m),source=dcmplx(0.d0,0.d0))
+        end if
     end subroutine init_block
 
     subroutine init_block_mat(this,n,m)

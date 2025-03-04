@@ -1,4 +1,5 @@
 module orbitals
+    use orbital_tools
     use bspline_tools
     use potentials
     use CAP_tools
