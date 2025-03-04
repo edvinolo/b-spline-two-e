@@ -52,49 +52,69 @@ contains
 
     end subroutine init_support
 
-    function eval_d(this,x,c) result(retval)
+    function eval_d(this,x,c,iv) result(retval)
         class(b_spline), intent(in) :: this
         double precision, intent(in) :: x
         double precision, dimension(this%n), intent(in) :: c
+        integer, optional, intent(in) :: iv
 
         double precision :: retval
 
-        retval = BVALUE_D(this%knots,c,this%n,this%k,x,0)
+        if (present(iv)) then
+            retval = BVALUE_D(this%knots,c,this%n,this%k,x,0,iv)
+        else
+            retval = BVALUE_D(this%knots,c,this%n,this%k,x,0)
+        end if
 
     end function eval_d
 
-    function d_eval_d(this,x,c,n_deriv) result(retval)
+    function d_eval_d(this,x,c,n_deriv,iv) result(retval)
         class(b_spline), intent(in) :: this
         double precision, intent(in) :: x
         double precision, dimension(this%n), intent(in) :: c
         integer, intent(in) :: n_deriv
+        integer, optional, intent(in) :: iv
 
         double precision :: retval
 
-        retval = BVALUE_D(this%knots,c,this%n,this%k,x,n_deriv)
+        if (present(iv)) then
+            retval = BVALUE_D(this%knots,c,this%n,this%k,x,n_deriv,iv)
+        else
+            retval = BVALUE_D(this%knots,c,this%n,this%k,x,n_deriv)
+        end if
 
     end function d_eval_d
 
-    function eval_z(this,x,c) result(retval)
+    function eval_z(this,x,c,iv) result(retval)
         class(b_spline), intent(in) :: this
         double precision, intent(in) :: x
         double complex, dimension(this%n), intent(in) :: c
+        integer, optional, intent(in) :: iv
 
         double complex :: retval
 
-        retval = BVALUE_Z(this%knots,c,this%n,this%k,x,0)
+        if (present(iv)) then
+            retval = BVALUE_Z(this%knots,c,this%n,this%k,x,0,iv)
+        else
+            retval = BVALUE_Z(this%knots,c,this%n,this%k,x,0)
+        end if
 
     end function eval_z
 
-    function d_eval_z(this,x,c,n_deriv) result(retval)
+    function d_eval_z(this,x,c,n_deriv,iv) result(retval)
         class(b_spline), intent(in) :: this
         double precision, intent(in) :: x
         double complex, dimension(this%n), intent(in) :: c
         integer, intent(in) :: n_deriv
+        integer, optional, intent(in) :: iv
 
         double complex :: retval
 
-        retval = BVALUE_Z(this%knots,c,this%n,this%k,x,n_deriv)
+        if (present(iv)) then
+            retval = BVALUE_Z(this%knots,c,this%n,this%k,x,n_deriv,iv)
+        else
+            retval = BVALUE_Z(this%knots,c,this%n,this%k,x,n_deriv)
+        end if
 
     end function d_eval_z
 
@@ -125,13 +145,14 @@ contains
 
     end subroutine BSPLEV
 
-    function BVALUE_D(t,a,n,k,x,i_deriv) result(val)
+    function BVALUE_D(t,a,n,k,x,i_deriv,iv) result(val)
         double precision, dimension(n+k), intent(in) :: t
         double precision, dimension(n),intent(in) :: a
         integer,intent(in) :: n
         integer,intent(in) :: k
         double precision, intent(in) :: x
         integer, intent(in) :: i_deriv
+        integer, optional, intent(in) :: iv
 
         double precision :: val
         integer :: j,jj,i,m_flag
@@ -146,7 +167,12 @@ contains
         end if
 
         k_m_1 = k - 1
-        call INTERV(t,n+1,x,i,m_flag)
+        if (present(iv)) then
+            m_flag = 0
+            i = k - 1 + iv
+        else
+            call INTERV(t,n+1,x,i,m_flag)
+        end if
 
         if (m_flag /= 0) then
             if (x < t(k)) return
@@ -194,13 +220,14 @@ contains
 
     end function BVALUE_D
 
-    function BVALUE_Z(t,a,n,k,x,i_deriv) result(val)
+    function BVALUE_Z(t,a,n,k,x,i_deriv,iv) result(val)
         double precision, dimension(n+k), intent(in) :: t
         double complex, dimension(n),intent(in) :: a
         integer,intent(in) :: n
         integer,intent(in) :: k
         double precision, intent(in) :: x
         integer, intent(in) :: i_deriv
+        integer, optional, intent(in) :: iv
 
         double complex :: val
         integer :: j,jj,i,m_flag
@@ -215,7 +242,12 @@ contains
         end if
 
         k_m_1 = k - 1
-        call INTERV(t,n+1,x,i,m_flag)
+        if (present(iv)) then
+            m_flag = 0
+            i = k - 1 + iv
+        else
+            call INTERV(t,n+1,x,i,m_flag)
+        end if
 
         if (m_flag /= 0) then
             if (x < t(k)) return

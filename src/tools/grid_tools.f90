@@ -32,14 +32,14 @@ subroutine generate_grid(k,m,Z,h_max,r_max,grid)
     i=k+m
     do
         next = grid(i)*(1.d0 + h)
-        if ((next-grid(i)).ge.h_max) exit 
+        if ((next-grid(i)).ge.h_max*z) exit
         grid(i+1) = next
         i = i + 1
     end do
 
     ! Linear spacing with h_max
     do while(grid(i) < z*r_max)
-        grid(i+1) = grid(i) + h_max
+        grid(i+1) = grid(i) + Z*h_max
         i = i + 1
     end do
 
@@ -50,7 +50,7 @@ subroutine generate_grid(k,m,Z,h_max,r_max,grid)
 
     call move_alloc(grid,temp_grid)
 
-    grid = temp_grid(1:N_grid)
+    grid = temp_grid(1:N_grid)/Z
 
 end subroutine generate_grid
 

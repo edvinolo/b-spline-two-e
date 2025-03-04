@@ -31,7 +31,7 @@ subroutine init_gau_leg(this,breakpoints,N)
     double precision, dimension(:), intent(in) :: breakpoints
     integer, intent(in) :: N
 
-    integer :: i,j,N_break
+    integer :: i,N_break
     double precision :: a,b
     double precision, dimension(N) :: x_temp,w_temp
 
