@@ -21,7 +21,7 @@ contains
         this%eta = eta
     end subroutine init_CAP
 
-    function V_CAP(this,r) result(retval)
+    pure function V_CAP(this,r) result(retval)
         class(CAP), intent(in) :: this
         double precision, intent(in) :: r
         double complex :: retval

@@ -77,17 +77,17 @@ contains
         end if
     end function X_k
 
-    pure function ang_k_LS(k,orbs,L) result(res)
+    pure function ang_k_LS(k,confs,L) result(res)
         integer, intent(in) :: k
-        type(orbital), dimension(4), intent(in) :: orbs
+        type(config), dimension(2), intent(in) :: confs
         integer, intent(in) :: L
         double precision :: res
 
-        if ((mod(orbs(1)%l+k+orbs(3)%l,2) /= 0).or.(mod(orbs(2)%l+k+orbs(4)%l,2) /= 0)) then
+        if ((mod(confs(1)%l(1)+k+confs(2)%l(1),2) /= 0).or.(mod(confs(1)%l(2)+k+confs(2)%l(2),2) /= 0)) then
             res = 0.d0
         else
-            res = (-1)**(orbs(2)%l+orbs(3)%l+L)*six_j(orbs(1)%l,orbs(2)%l,L,orbs(3)%l,orbs(4)%l,k) &
-                *C_red_mat(k,orbs(1)%l,orbs(3)%l)*C_red_mat(k,orbs(2)%l,orbs(4)%l)
+            res = (-1)**(confs(1)%l(2)+confs(2)%l(1)+L)*six_j(confs(1)%l(1),confs(1)%l(2),L,confs(2)%l(2),confs(2)%l(1),k) &
+                *C_red_mat(k,confs(1)%l(1),confs(2)%l(1))*C_red_mat(k,confs(1)%l(2),confs(2)%l(2))
         end if
     end function ang_k_LS
 

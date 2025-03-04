@@ -26,6 +26,7 @@ program test_bsplines
 
     write(6,*) splines%knots
     write(6,*) splines%breakpoints
+    write(6,*) splines%n
 
     call INTERV(grid,size(grid),2.d0,z,m)
     write(6,*) z,m
@@ -71,6 +72,7 @@ program test_bsplines
     end do
 
     call spline_test%init(5,test_grid)
+    write(6,*) spline_test%n
     deallocate(c)
     allocate(c(spline_test%n))
     c = dcmplx(0.d0,0.d0)
