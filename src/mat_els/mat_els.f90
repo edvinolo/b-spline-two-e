@@ -3,8 +3,11 @@ module mat_els
     use bspline_tools
     use grid_tools
     use sparse_array_tools
+    use block_tools
     use potentials
     use CAP_tools
+    use wigner_tools
+    use orbital_tools
     implicit none
 
 contains
@@ -39,7 +42,7 @@ contains
 
                 do i_r = 1, size(b_splines%breakpoints)-1
                     if (b_splines%support(i_r,i_b+1).and.b_splines%support(i_r,j_b+1)) then
-                        call compute_H(potential,CAP_c,l,b_splines,i_b,j_b,c_i,c_j,k_GL,g_l%x(:,i_r),g_l%w(:,i_r),H)
+                        call compute_H(potential,CAP_c,l,b_splines,i_b,j_b,c_i,c_j,i_r,k_GL,g_l%x(:,i_r),g_l%w(:,i_r),H)
                     end if
                 end do
             end do
@@ -74,7 +77,7 @@ contains
 
                 do i_r = 1, size(b_splines%breakpoints)-1
                     if (b_splines%support(i_r,i_b+1).and.b_splines%support(i_r,j_b+1)) then
-                        call compute_S(b_splines,i_b,j_b,c_i,c_j,k_GL,g_l%x(:,i_r),g_l%w(:,i_r),S)
+                        call compute_S(b_splines,i_b,j_b,c_i,c_j,i_r,k_GL,g_l%x(:,i_r),g_l%w(:,i_r),S)
                     end if
                 end do
             end do
@@ -108,9 +111,9 @@ contains
         call setup_GL(k_GL,-1.d0,1.d0,x,w)
 
         allocate(c_i(b_splines%n),c_j(b_splines%n))
-        c_j = 0.d0
         do k = 0,max_k
             ptr = 0
+            c_j = 0.d0
             do j_b = 1, b_splines%n-2
                 c_j(j_b+1) = 1.d0
                 c_j(j_b) = 0.d0
@@ -153,29 +156,27 @@ contains
         call setup_GL(k_GL,-1.d0,1.d0,x,w)
 
         allocate(c(b_splines%n,4))
-        c = 0.d0
         i = 0
         do k = 0,max_k
             ptr = 0
+            c = 0.d0
             do j_b_p = 1, b_splines%n-2
                 c(:,3) = 0.d0
                 c(j_b_p+1,4) = 1.d0
                 c(j_b_p,4) = 0.d0
                 i(4) = j_b_p
-                do i_b_p = 1, b_splines%n-2
+                do j_b = 1, b_splines%n-2
+                    if (abs(j_b-j_b_p)>=b_splines%k) then
+                        cycle
+                    end if
                     c(:,2) = 0.d0
-                    c(i_b_p+1,3) = 1.d0
-                    c(i_b_p,3) = 0.d0
-                    i(3) = i_b_p
-                    do j_b = 1, b_splines%n-2
-                        c(j_b+1,2) = 1.d0
-                        c(j_b,2) = 0.d0
-                        i(2) = j_b
-
-                        if (abs(j_b-j_b_p)>=b_splines%k) then
-                            cycle
-                        end if
-
+                    c(j_b+1,3) = 1.d0
+                    c(j_b,3) = 0.d0
+                    i(3) = j_b
+                    do i_b_p = 1, b_splines%n-2
+                        c(i_b_p+1,2) = 1.d0
+                        c(i_b_p,2) = 0.d0
+                        i(2) = i_b_p
                         c(:,1) = 0.d0
                         do i_b = 1, b_splines%n-2
                             c(i_b+1,1) = 1.d0
@@ -201,7 +202,7 @@ contains
         end do
     end subroutine setup_Slater_diag
 
-    subroutine compute_H(potential,CAP_c,l,b_splines,i,j,c_i,c_j,k_GL,r,w,H)
+    subroutine compute_H(potential,CAP_c,l,b_splines,i,j,c_i,c_j,i_r,k_GL,r,w,H)
         ! This is way too many arguments. Need to think about how to do this smarter.
         class(sph_pot), intent(in) :: potential
         class(CAP), intent(in) :: CAP_c
@@ -211,6 +212,7 @@ contains
         integer, intent(in) :: j
         double precision, dimension(b_splines%n), intent(in) :: c_i
         double precision, dimension(b_splines%n), intent(in) :: c_j
+        integer, intent(in) :: i_r
         integer, intent(in) :: k_GL
         double precision, dimension(k_GL), intent(in) :: r
         double precision, dimension(k_GL), intent(in) :: w
@@ -221,21 +223,22 @@ contains
         double precision :: B_i, B_j, D_B_j
 
         do i_sum = 1, k_GL
-            B_i = b_splines%eval_d(r(i_sum),c_i)
-            B_j = b_splines%eval_d(r(i_sum),c_j)
-            D_B_j = b_splines%d_eval_d(r(i_sum),c_j,2)
+            B_i = b_splines%eval_d(r(i_sum),c_i,i_r)
+            B_j = b_splines%eval_d(r(i_sum),c_j,i_r)
+            D_B_j = b_splines%d_eval_d(r(i_sum),c_j,2,i_r)
             H(i,j) = H(i,j) + w(i_sum)*(-0.5*B_i*D_B_j + (potential%V(r(i_sum),l) + CAP_c%V(r(i_sum)))*B_i*B_j)
         end do
 
     end subroutine compute_H
 
-    subroutine compute_S(b_splines,i,j,c_i,c_j,k_GL,r,w,S)
+    subroutine compute_S(b_splines,i,j,c_i,c_j,i_r,k_GL,r,w,S)
         ! This is way too many arguments. Need to think about how to do this smarter.
         type(b_spline), intent(in) :: b_splines
         integer, intent(in) :: i
         integer, intent(in) :: j
         double precision, dimension(b_splines%n), intent(in) :: c_i
         double precision, dimension(b_splines%n), intent(in) :: c_j
+        integer, intent(in) :: i_r
         integer, intent(in) :: k_GL
         double precision, dimension(k_GL), intent(in) :: r
         double precision, dimension(k_GL), intent(in) :: w
@@ -246,19 +249,20 @@ contains
         double precision :: B_i, B_j
 
         do i_sum = 1, k_GL
-            B_i = b_splines%eval_d(r(i_sum),c_i)
-            B_j = b_splines%eval_d(r(i_sum),c_j)
+            B_i = b_splines%eval_d(r(i_sum),c_i,i_r)
+            B_j = b_splines%eval_d(r(i_sum),c_j,i_r)
             S(i,j) = S(i,j) + w(i_sum)*B_i*B_j
         end do
 
     end subroutine compute_S
 
-    subroutine compute_radial_dip(b_splines,i,j,c_i,c_j,k_GL,r,w,r_mat,dr_mat)
+    subroutine compute_radial_dip(b_splines,i,j,c_i,c_j,i_r,k_GL,r,w,r_mat,dr_mat)
         type(b_spline), intent(in) :: b_splines
         integer, intent(in) :: i
         integer, intent(in) :: j
         double precision, dimension(b_splines%n), intent(in) :: c_i
         double precision, dimension(b_splines%n), intent(in) :: c_j
+        integer, intent(in) :: i_r
         integer, intent(in) :: k_GL
         double precision, dimension(k_GL), intent(in) :: r
         double precision, dimension(k_GL), intent(in) :: w
@@ -268,9 +272,9 @@ contains
         integer :: i_sum
         double precision :: B_i,B_j,D_B_j
         do i_sum = 1, k_GL
-            B_i = b_splines%eval_d(r(i_sum),c_i)
-            B_j = b_splines%eval_d(r(i_sum),c_j)
-            D_B_j = b_splines%d_eval_d(r(i_sum),c_j,1)
+            B_i = b_splines%eval_d(r(i_sum),c_i,i_r)
+            B_j = b_splines%eval_d(r(i_sum),c_j,i_r)
+            D_B_j = b_splines%d_eval_d(r(i_sum),c_j,1,i_r)
             r_mat(i,j) = r_mat(i,j) + w(i_sum)*r(i_sum)*B_i*B_j
             dr_mat(i,j) = dr_mat(i,j) + dcmplx(0.d0,-1.d0)*w(i_sum)*B_i*D_B_j
         end do
@@ -301,8 +305,8 @@ contains
         translate = 0.5d0*(limits(2)+limits(1))
         do i_sum = 1, k_GL
             r(i_sum) = scale*x(i_sum) + translate
-            B_i(i_sum) = b_splines%eval_d(r(i_sum),c_i)
-            B_j(i_sum) = b_splines%eval_d(r(i_sum),c_j)
+            B_i(i_sum) = b_splines%eval_d(r(i_sum),c_i,i_r)
+            B_j(i_sum) = b_splines%eval_d(r(i_sum),c_j,i_r)
         end do
 
         do i_sum = 1,k_GL
@@ -348,8 +352,8 @@ contains
         translate_i= 0.5d0*(limits(2)+limits(1))
         do i_sum = 1, k_GL
             r(i_sum) = scale_i*x(i_sum) + translate_i
-            B_i(i_sum) = b_splines%eval_d(r(i_sum),c(:,1))
-            B_i_p(i_sum) = b_splines%eval_d(r(i_sum),c(:,3))
+            B_i(i_sum) = b_splines%eval_d(r(i_sum),c(:,1),i_r)
+            B_i_p(i_sum) = b_splines%eval_d(r(i_sum),c(:,2),i_r)
         end do
 
         do i_sum = 1,k_GL
@@ -358,8 +362,8 @@ contains
             int_j = 0.d0
             do j_sum = 1,k_GL
                 r_j = scale_j*x(j_sum) + translate_j
-                B_j = b_splines%eval_d(r_j,c(:,2))
-                B_j_p = b_splines%eval_d(r_j,c(:,4))
+                B_j = b_splines%eval_d(r_j,c(:,3),i_r)
+                B_j_p = b_splines%eval_d(r_j,c(:,4),i_r)
                 int_j = int_j + w(j_sum)*B_j*B_j_p*r_j**k
             end do
             int_j = scale_j*int_j
@@ -371,41 +375,227 @@ contains
         if (k==0) then
             r_d_k%iv(ptr) = i_r
             r_d_k%i(ptr) = i(1)
-            r_d_k%j(ptr) = i(2)
-            r_d_k%i_p(ptr) = i(3)
+            r_d_k%i_p(ptr) = i(2)
+            r_d_k%j(ptr) = i(3)
             r_d_k%j_p(ptr) = i(4)
         end if
     end subroutine compute_Slater_diag
 
-    function Slater_k(n_b,a,b,c,d,k,r_d_k,r_k,r_m_k) result(res)
+    function Slater_k(n_b,ac,bd,k,Rk) result(res)
         integer, intent(in) :: n_b
-        double complex, dimension(n_b), intent(in) :: a,b,c,d
+        !double complex, dimension(n_b,n_b), intent(in) :: a,b,c,d
+        double complex, dimension(n_b,n_b), intent(in) :: ac,bd
         integer, intent(in) :: k
-        type(sparse_6d), intent(in) :: r_d_k
-        type(sparse_4d), intent(in) :: r_k
-        type(sparse_4d), intent(in) :: r_m_k
-
+        type(sparse_Slater), intent(in) :: Rk
         double complex :: res
-        double complex :: coeffs
-        integer i,j
 
+        double complex :: bcd,temp
+        integer i,j,j_p
 
         res = 0.d0
-        do i = 1, r_d_k%nnz
-            coeffs = a(r_d_k%i(i))*b(r_d_k%j(i))*c(r_d_k%i_p(i))*d(r_d_k%j_p(i)) &
-                    + b(r_d_k%i(i))*a(r_d_k%j(i))*d(r_d_k%i_p(i))*c(r_d_k%j_p(i))
-            res = res + coeffs*r_d_k%data(i,k)
+        j = Rk%j(1)
+        j_p = Rk%j_p(1)
+        temp = 0.d0
+        bcd = bd(Rk%j(1),Rk%j_p(1))
+        do i = 1, Rk%nnz
+            if (j/=Rk%j(i)) then
+                res = res + bd(j,j_p)*temp
+                temp = 0.d0
+                j = Rk%j(i)
+                j_p = Rk%j_p(i)
+            end if
+            temp = temp + ac(Rk%i(i),Rk%i_p(i))*(Rk%data(i,k))
         end do
+        res = res + temp*bd(Rk%j(Rk%nnz),Rk%j_p(Rk%nnz))
+    end function Slater_k
 
-        do i = 1,r_k%nnz
-            do j = 1,r_k%nnz
-                if (r_k%iv(i) < r_k%iv(j)) then
-                    coeffs = a(r_k%i(i))*b(r_k%i(j))*c(r_k%j(i))*d(r_k%j(j)) &
-                    + b(r_k%i(i))*a(r_k%i(j))*d(r_k%j(i))*c(r_k%j(j))
-                    res = res + coeffs*r_k%data(i,k)*r_m_k%data(j,k)
-                end if
+    function r_12(n_b,L,configs,a,b,c,d,max_k,Rk) result(res)
+        integer, intent(in) :: n_b
+        integer, intent(in) :: L
+        type(config), dimension(2), intent(in) :: configs
+        double complex, dimension(n_b), intent(in) :: a,b,c,d
+        integer, intent(in) :: max_k
+        type(sparse_Slater), intent(in) :: Rk
+        double complex :: res
+
+        integer :: k,i,j
+        double complex, dimension(:,:), allocatable :: ac,bd
+        double precision :: ang
+
+        allocate(ac(n_b,n_b),bd(n_b,n_b),source = dcmplx(0.d0,0.d0))
+
+        do i = 1,n_b
+            do j = 1,n_b
+                ac(j,i) = a(j)*c(i)
+                bd(j,i) = b(j)*d(i)
             end do
         end do
 
-    end function Slater_k
+
+        res = 0.d0
+        do k = 0, max_k
+            ang = ang_k_LS(k,configs,L)
+            if (abs(ang)<5.d-16) cycle
+            res = res + Slater_k(n_b,ac,bd,k,Rk)*ang
+        end do
+    end function r_12
+
+    pure function r_12_tens(L,configs,a,b,c,d,max_k,Rk,ptr,R_k) result(res)
+        integer, intent(in) :: L
+        type(config), dimension(2), intent(in) :: configs
+        integer, intent(in) :: a,b,c,d
+        integer, intent(in) :: max_k
+        type(sparse_Slater), intent(in) :: Rk
+        integer, intent(in) :: ptr
+        double precision, dimension(:,:,:,:,:), allocatable,intent(in) :: R_k
+        double precision :: res
+
+        integer :: k
+        double precision :: ang
+
+        res = 0.d0
+        do k = 0, max_k
+            ang = ang_k_LS(k,configs,L)
+            res = res + R_k(k,a,b,c,d)*ang
+        end do
+    end function r_12_tens
+
+    function c_mat_neq(n_b,L,configs,a,b,c,d,max_k,Rk) result(res)
+        integer, intent(in) :: n_b
+        integer, intent(in) :: L
+        type(config), dimension(2), intent(in) :: configs
+        double complex, dimension(n_b), intent(in) :: a,b,c,d
+        integer, intent(in) :: max_k
+        type(sparse_Slater), intent(in) :: Rk
+        double complex :: res
+
+        type(config), dimension(2) :: configs_ex
+
+        configs_ex(1) = configs(1)
+        configs_ex(2)%n = configs(2)%n([2,1])
+        configs_ex(2)%l = configs(2)%l([2,1])
+        res = r_12(n_b,L,configs,a,b,c,d,max_k,Rk)
+        res = res + (-1)**(configs(2)%l(1) + configs(2)%l(2) + L)&
+                *r_12(n_b,L,configs_ex,a,b,d,c,max_k,Rk)
+
+    end function c_mat_neq
+
+    function c_mat_eq(both,n_b,L,configs,a,b,c,d,max_k,Rk) result(res)
+        logical, intent(in) :: both
+        integer, intent(in) :: n_b
+        integer, intent(in) :: L
+        type(config), dimension(2), intent(in) :: configs
+        double complex, dimension(n_b), intent(in) :: a,b,c,d
+        integer, intent(in) :: max_k
+        type(sparse_Slater), intent(in) :: Rk
+        double complex :: res
+
+        res = r_12(n_b,L,configs,a,b,c,d,max_k,Rk)
+
+        if (.not.both) res = sqrt(2.d0)*res
+    end function c_mat_eq
+
+    pure function c_mat_neq_tens(L,configs,a,b,c,d,max_k,Rk,ptr,R_k) result(res)
+        integer, intent(in) :: L
+        type(config), dimension(2), intent(in) :: configs
+        integer, intent(in) :: a,b,c,d
+        integer, intent(in) :: max_k
+        type(sparse_Slater), intent(in) :: Rk
+        integer, intent(in) :: ptr
+        double precision, dimension(:,:,:,:,:), allocatable, intent(in) :: R_k
+        double precision :: res
+
+        type(config), dimension(2) :: configs_ex
+
+        configs_ex(1) = configs(1)
+        configs_ex(2)%n = configs(2)%n([2,1])
+        configs_ex(2)%l = configs(2)%l([2,1])
+        res = r_12_tens(L,configs,a,b,c,d,max_k,Rk,ptr,R_k)
+        res = res + (-1)**(configs(2)%l(1) + configs(2)%l(2) + L)&
+                *r_12_tens(L,configs_ex,a,b,d,c,max_k,Rk,ptr,R_k)
+    end function c_mat_neq_tens
+
+    pure function c_mat_eq_tens(both,L,configs,a,b,c,d,max_k,Rk,ptr,R_k) result(res)
+        logical, intent(in) :: both
+        integer, intent(in) :: L
+        type(config), dimension(2), intent(in) :: configs
+        integer, intent(in) :: a,b,c,d
+        integer, intent(in) :: max_k
+        type(sparse_Slater), intent(in) :: Rk
+        integer, intent(in) :: ptr
+        double precision, dimension(:,:,:,:,:), allocatable, intent(in) :: R_k
+        double precision :: res
+
+        res = r_12_tens(L,configs,a,b,c,d,max_k,Rk,ptr,R_k)
+
+        if (.not.both) res = sqrt(2.d0)*res
+    end function c_mat_eq_tens
+
+    pure function S_mat_eq(both,confs,S) result(res)
+        logical, intent(in) :: both
+        type(config), dimension(2), intent(in) :: confs
+        double complex, dimension(:,:), intent(in) :: S
+        double complex :: res
+
+        if ((confs(1)%l(1)/=confs(2)%l(1)).or.(confs(1)%l(2)/=confs(2)%l(2))) then
+            res = 0.d0
+            return
+        end if
+
+        res = S(confs(1)%n(1),confs(2)%n(1))*S(confs(1)%n(2),confs(2)%n(2))
+        if (.not.both) res = sqrt(2.d0)*res
+    end function S_mat_eq
+
+    pure function S_mat_neq(confs,L,S) result(res)
+        type(config), dimension(2), intent(in) :: confs
+        integer, intent(in) :: L
+        double complex, dimension(:,:), intent(in) :: S
+        double complex :: res
+
+        res = 0.d0
+        if ((confs(1)%l(1)==confs(2)%l(1)).and.(confs(1)%l(2)==confs(2)%l(2))) then
+            res = res + S(confs(1)%n(1),confs(2)%n(1))*S(confs(1)%n(2),confs(2)%n(2))
+        end if
+
+        if ((confs(1)%l(1)==confs(2)%l(2)).and.(confs(1)%l(2)==confs(2)%l(1))) then
+            res = res + (-1)**(L+sum(confs(2)%l))*S(confs(1)%n(1),confs(2)%n(2))*S(confs(1)%n(2),confs(2)%n(1))
+        end if
+    end function S_mat_neq
+
+    pure function H_1p_eq(both,confs,H,S) result(res)
+        logical, intent(in) :: both
+        type(config), dimension(2), intent(in) :: confs
+        type(block), dimension(:), allocatable, intent(in) :: H
+        double complex, dimension(:,:), intent(in) :: S
+        double complex :: res
+
+        if ((confs(1)%l(1)/=confs(2)%l(1)).or.(confs(1)%l(2)/=confs(2)%l(2))) then
+            res = 0.d0
+            return
+        end if
+
+        res = H(confs(1)%l(1))%data(confs(1)%n(1),confs(2)%n(1))*S(confs(1)%n(2),confs(2)%n(2)) &
+              + H(confs(1)%l(2))%data(confs(1)%n(2),confs(2)%n(2))*S(confs(1)%n(1),confs(2)%n(1))
+        if (.not.both) res = sqrt(2.d0)*res
+    end function H_1p_eq
+
+    pure function H_1p_neq(confs,L,H,S) result(res)
+        type(config), dimension(2), intent(in) :: confs
+        integer, intent(in) :: L
+        type(block), dimension(:), allocatable, intent(in) :: H
+        double complex, dimension(:,:), intent(in) :: S
+        double complex :: res
+
+        res = 0.d0
+        if ((confs(1)%l(1)==confs(2)%l(1)).and.(confs(1)%l(2)==confs(2)%l(2))) then
+            res = res + H(confs(1)%l(1))%data(confs(1)%n(1),confs(2)%n(1))*S(confs(1)%n(2),confs(2)%n(2)) &
+            + H(confs(1)%l(2))%data(confs(1)%n(2),confs(2)%n(2))*S(confs(1)%n(1),confs(2)%n(1))
+        end if
+
+        if ((confs(1)%l(1)==confs(2)%l(2)).and.(confs(1)%l(2)==confs(2)%l(1))) then
+            res = res + (H(confs(1)%l(1))%data(confs(1)%n(1),confs(2)%n(2))*S(confs(1)%n(2),confs(2)%n(1)) &
+            + H(confs(1)%l(2))%data(confs(1)%n(2),confs(2)%n(1))*S(confs(1)%n(1),confs(2)%n(2))) &
+            *(-1)**(L+sum(confs(2)%l))
+        end if
+    end function H_1p_neq
 end module mat_els

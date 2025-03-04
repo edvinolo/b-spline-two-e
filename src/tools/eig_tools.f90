@@ -36,13 +36,13 @@ contains
         allocate(B_copy(N,N))
         B_copy = B
 
-        call ggev(jobvl,jobvr,N,A,N,B_copy,N,alpha,beta,vl,N,vecs,N,work,lwork,rwork,info)
+        call zggev3(jobvl,jobvr,N,A,N,B_copy,N,alpha,beta,vl,N,vecs,N,work,lwork,rwork,info)
 
         lwork = int(work(1))
         deallocate(work)
         allocate(work(lwork))
 
-        call ggev(jobvl,jobvr,N,A,N,B_copy,N,alpha,beta,vl,N,vecs,N,work,lwork,rwork,info)
+        call zggev3(jobvl,jobvr,N,A,N,B_copy,N,alpha,beta,vl,N,vecs,N,work,lwork,rwork,info)
 
         if (info /= 0) then
             write(stderr,*) "zggev exited with info: ", info
@@ -81,6 +81,21 @@ contains
     end subroutine B_normalize
 
     ! Sort eigenvalues and eigenvector based on the real part of the eigenvalues
+    subroutine sort_eigvals(n_b,eigs)
+        integer, intent(in) :: n_b
+        double complex, dimension(n_b), intent(inout) :: eigs
+
+        integer, dimension(n_b) :: index
+        double precision, dimension(n_b) :: eigs_real
+
+        eigs_real = real(eigs)
+
+        call sort_index(eigs_real,index)
+
+        eigs = eigs(index)
+    end subroutine sort_eigvals
+
+    ! Sort eigenvalues and eigenvector based on the real part of the eigenvalues
     subroutine sort_eig(n_b,eigs,vecs)
         integer, intent(in) :: n_b
         double complex, dimension(n_b), intent(inout) :: eigs
@@ -88,13 +103,12 @@ contains
 
         integer, dimension(n_b) :: index
         double precision, dimension(n_b) :: eigs_real
-        
+
         eigs_real = real(eigs)
 
         call sort_index(eigs_real,index)
 
         eigs = eigs(index)
         vecs = vecs(:,index)
-
     end subroutine sort_eig
 end module eig_tools
