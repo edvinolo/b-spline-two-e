@@ -111,6 +111,7 @@ contains
         call setup_GL(k_GL,-1.d0,1.d0,x,w)
 
         allocate(c_i(b_splines%n),c_j(b_splines%n))
+        !$omp parallel do private(ptr,c_i,c_j,i_b,j_b,i_r,limits)
         do k = 0,max_k
             ptr = 0
             c_j = 0.d0
@@ -138,6 +139,7 @@ contains
                     end do
             end do
         end do
+        !$omp end parallel do
     end subroutine setup_Slater_off_diag
 
     subroutine setup_Slater_diag(b_splines,max_k,k_GL,r_d_k)
@@ -157,6 +159,7 @@ contains
 
         allocate(c(b_splines%n,4))
         i = 0
+        !$omp parallel do private(ptr,c,i,i_b,j_b,i_b_p,j_b_p,i_r,i_support,j_support,limits)
         do k = 0,max_k
             ptr = 0
             c = 0.d0
@@ -200,6 +203,7 @@ contains
                 end do
             end do
         end do
+        !$omp end parallel do
     end subroutine setup_Slater_diag
 
     subroutine compute_H(potential,CAP_c,l,b_splines,i,j,c_i,c_j,i_r,k_GL,r,w,H)

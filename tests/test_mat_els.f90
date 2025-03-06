@@ -82,10 +82,13 @@ program mat_els_test
     !r_k = 0.d0
     !r_m_k = 0.d0
     !r_d_k = 0.d0
+    t_start = omp_get_wtime()
     call r_k%init(max_k,splines)
     call r_m_k%init(max_k,splines)
     call r_d_k%init(max_k,splines)
     call setup_Slater_integrals(splines,max_k,k_GL,r_k,r_m_k,r_d_k)
+    t_end = omp_get_wtime()
+    write(6,*) "Time computing primitive cell integrals (s): ", t_end -t_start
     call Rk%init(max_k,splines,r_d_k,r_k,r_m_k)
     ! do i = 1,r_k%nnz
     !     do j = 1,r_k%nnz
