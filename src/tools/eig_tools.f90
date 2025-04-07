@@ -1,8 +1,10 @@
 module eig_tools
+    use sparse_array_tools, only: CSR_matrix,CSC_matrix
     use stdlib_linalg_lapack, only: ggev
     use stdlib_linalg_blas, only: dotc,dotu,gemv
     use stdlib_sorting, only: sort_index
     use iso_fortran_env, only: stderr => error_unit
+    use omp_lib, only: omp_get_wtime
     implicit none
 
 contains
@@ -111,4 +113,51 @@ contains
         eigs = eigs(index)
         vecs = vecs(:,index)
     end subroutine sort_eig
+
+    subroutine FEAST(H,S,A,B,mid,rad,eigs,vecs,M)
+        double complex, dimension(:,:), intent(in) :: H
+        double complex, dimension(:,:), intent(in) :: S
+        type(CSR_matrix), intent(inout) :: A
+        type(CSR_matrix), intent(inout) :: B
+        double complex, intent(in) :: mid
+        double precision, intent(in) :: rad
+        double complex, dimension(:), allocatable, intent(inout) :: eigs
+        double complex, dimension(:,:), allocatable, intent(inout) :: vecs
+        integer, intent(out) :: M
+
+        double precision :: t_1,t_2
+        double precision :: epsout
+        integer :: M_0,loop,info,i
+        double precision, dimension(:), allocatable :: res
+        integer, dimension(64) :: fpm
+
+        call feastinit(fpm)
+        fpm(1) = 1
+        write(6,*) fpm(42)
+        if (fpm(42)==1)then
+            stop
+        end if
+        !fpm(42) = 0
+
+        M_0 = 10
+        if (allocated(eigs)) deallocate(eigs)
+        if (allocated(vecs)) deallocate(vecs)
+        allocate(res(M_0),eigs(M_0),vecs(A%shape(1),M_0))
+
+        write(6,*) "Finding eigenvalues using FEAST"
+        t_1 = omp_get_wtime()
+        call zfeast_scsrgv('F',A%shape(1),A%data,A%index_ptr,A%indices,B%data,B%index_ptr,B%indices &
+                            ,fpm,epsout,loop,mid,rad,M_0,eigs,vecs,M,res,info)
+        !call zfeast_gcsrgv(A%shape(1),A%data,A%index_ptr,A%indices,B%data,B%index_ptr,B%indices &
+        !                    ,fpm,epsout,loop,mid,rad,M_0,eigs,vecs,M,res,info)
+        !call zfeast_sygv('F',A%shape(1),H,A%shape(1),S,A%shape(1) &
+        !                    ,fpm,epsout,loop,mid,rad,M_0,eigs,vecs,M,res,info)
+        t_2 = omp_get_wtime()
+        write(6,*) "Time for FEAST (s): ", t_2-t_1
+
+        do i = 1,M
+            write(6,*) eigs(i)
+        end do
+
+    end subroutine FEAST
 end module eig_tools
