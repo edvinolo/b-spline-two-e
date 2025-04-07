@@ -460,6 +460,7 @@ contains
         res = 0.d0
         do k = 0, max_k
             ang = ang_k_LS(k,configs,L)
+            if (abs(ang)<5.d-16) cycle
             res = res + R_k(k,a,b,c,d)*ang
         end do
     end function r_12_tens

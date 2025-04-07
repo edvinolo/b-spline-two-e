@@ -106,9 +106,9 @@ contains
         res = .true.
     end function dip_allowed
 
-    pure function count_configs(term,max_l,n_b,eigs) result(res)
+    pure function count_configs(term,max_l_1p,n_b,eigs) result(res)
         type(sym), intent(in) :: term
-        integer, intent(in) :: max_l
+        integer, intent(in) :: max_l_1p
         integer, intent(in) :: n_b
         double complex, dimension(:,:), allocatable, intent(in) :: eigs
         type(config), dimension(:), allocatable :: res
@@ -123,8 +123,8 @@ contains
         orbs%m = 0
         ptr = 1
         energy_1p = 0.d0
-        allocate(temp_list((max_l+1)**2*n_b**2))
-        do i = 0,max_l
+        allocate(temp_list((max_l_1p+1)**2*n_b**2))
+        do i = 0,max_l_1p
             orbs(1)%l = i
             orbs(1)%pi = (mod(i,2)/=0)
             do j = 0,i
@@ -164,50 +164,67 @@ contains
         res = temp_list(1:ptr-1)
     end function count_configs
 
-    pure function count_terms(max_L) result(res)
+    pure function count_terms(max_L,z_pol) result(res)
         integer, intent(in) :: max_L
+        logical, intent(in) :: z_pol
         integer :: res
 
-        integer :: i
-
-        res = 1 !L = 0,Pi = -1 is not possible.
-        do i = 1,max_L
-            res = res + 2*(2*i + 1)
-        end do
+        !Include ony those that are reachable from S^e block.
+        if (z_pol) then
+            res = max_L + 1
+        else
+            res = (max_L +1)**2
+        end if
     end function count_terms
 
-    pure subroutine init_basis(this,max_L,n_b,eigs)
+    pure subroutine init_basis(this,max_L,max_l_1p,n_b,z_pol,eigs)
         class(basis), intent(inout) :: this
         integer, intent(in) ::  max_L
+        integer, intent(in) :: max_l_1p
         integer, intent(in) :: n_b
+        logical, intent(in) :: z_pol
         double complex, dimension(:,:), allocatable, intent(in) :: eigs
 
         integer :: l,m,p,ptr
         logical :: par
-        this%n_sym = count_terms(max_L)
+        this%n_sym = count_terms(max_L,z_pol)
         allocate(this%syms(this%n_sym))
 
         this%syms(1)%l = 0
         this%syms(1)%m = 0
         this%syms(1)%pi = .false.
-        this%syms(1)%configs = count_configs(this%syms(1),max_L,n_b,eigs)
+        this%syms(1)%configs = count_configs(this%syms(1),max_l_1p,n_b,eigs)
         this%syms(1)%n_config = size(this%syms(1)%configs)
 
         ptr = 2
-        do l = 1,max_L
-            do p = 0,1
-                if (p==0) par = .false.
-                if (p==1) par = .true.
-                do m = -l,l
-                    this%syms(ptr)%l = l
-                    this%syms(ptr)%m = m
-                    this%syms(ptr)%pi = par
-                    !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
-                    this%syms(ptr)%configs = count_configs(this%syms(ptr),max_L,n_b,eigs)
-                    this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
-                    ptr = ptr + 1
+
+        if (z_pol) then
+            do l = 1,max_L
+                this%syms(ptr)%l = l
+                this%syms(ptr)%m = m
+                this%syms(ptr)%pi = (mod(l,2)/=0)
+                !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
+                this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,eigs)
+                this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
+                ptr = ptr + 1
+            end do
+        else
+            do l = 1,max_L
+                do p = 0,1
+                    if (p==0) par = .false.
+                    if (p==1) par = .true.
+                    do m = -l,l
+                        if (abs(mod(m,2))/=p) cycle
+                        this%syms(ptr)%l = l
+                        this%syms(ptr)%m = m
+                        this%syms(ptr)%pi = par
+                        !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
+                        this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,eigs)
+                        this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
+                        ptr = ptr + 1
+                    end do
                 end do
             end do
-        end do
+        end if
     end subroutine init_basis
 end module orbital_tools

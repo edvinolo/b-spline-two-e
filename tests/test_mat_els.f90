@@ -37,6 +37,10 @@ program mat_els_test
     type(config),dimension(2) :: confs
     double precision, dimension(:,:,:,:,:),allocatable :: R_p
     double complex :: res
+    integer, dimension(2) :: nnz
+    type(CSC_matrix) H_spc,S_spc
+    type(CSR_matrix) H_spr,S_spr
+    type(CSC_matrix), dimension(:), allocatable :: H_diag,S_diag
 
     !for ploting orbitals
     double complex, dimension(:), allocatable :: vals
@@ -48,14 +52,14 @@ program mat_els_test
 
     type(CAP) :: CAP_c
     integer :: CAP_order = 2
-    double precision :: CAP_r_0 = 60.d0
+    double precision :: CAP_r_0 = 45.d0
     double complex :: CAP_eta = dcmplx(1.d-3,0.d0)
 
-    k = 8
+    k = 6
     m = 3
     Z = 2
     h_max = 0.5d0
-    r_max = 10.d0
+    r_max = 5.d0
     k_GL = splines%k + 6
     call generate_grid(k,m,Z,h_max,r_max,grid)
     call splines%init(k,grid)
@@ -207,13 +211,13 @@ program mat_els_test
     ! end do
     ! close(1)
 
-    allocate(eigs_v(splines%n_b,0:2),vecs_v(0:2))
-    call find_orbitals(splines,k_GL,pot,CAP_c,2,eigs_v,vecs_v)
+    allocate(eigs_v(splines%n_b,0:5),vecs_v(0:5))
+    call find_orbitals(splines,k_GL,pot,CAP_c,5,eigs_v,vecs_v)
 
     S = 0.d0
     call setup_S(splines,k_GL,S)
-    allocate(H_vec(0:2))
-    do i =0,2
+    allocate(H_vec(0:3))
+    do i =0,3
         call H_vec(i)%init(splines%n_b,splines%n_b,.true.)
         call setup_H_one_particle(pot,CAP_c,i,splines,k_GL,H_vec(i)%data)
     end do
@@ -263,29 +267,55 @@ program mat_els_test
     write(6,*) res
     !stop
 
-    call bas%init(2,splines%n_b,eigs_v)
-    call H_block%init(bas%syms(5)%n_config,bas%syms(5)%n_config,.true.)
-    call S_block%init(bas%syms(5)%n_config,bas%syms(5)%n_config,.true.)
-    write(6,*) bas%syms(5)%l,bas%syms(5)%m,bas%syms(5)%pi,bas%syms(5)%n_config
+    call bas%init(4,3,splines%n_b,.true.,eigs_v)
+    call H_block%init(bas%syms(2)%n_config,bas%syms(2)%n_config,.true.)
+    call S_block%init(bas%syms(2)%n_config,bas%syms(2)%n_config,.true.)
+    write(6,*) bas%syms(1)%l,bas%syms(1)%m,bas%syms(1)%pi,bas%syms(1)%n_config
+    nnz = count_nnz(splines,bas%syms(2),max_k)
+    write(6,*) "nnz: ",nnz
     !call construct_block(H_block,bas%syms(1),eigs_v,vecs_v,max_k,Rk)
-    call construct_block_tensor(H_block,H_vec,S_block,S,splines,bas%syms(5),max_k,Rk,R_p)
-    write(6,*) H_block%data(1,1),S_block%data(1,1)
-    write(6,*) H_vec(0)%data(1,1),S(1,1),2*H_vec(0)%data(1,1)*S(1,1),S(1,1)**2
+    call construct_block_tensor(H_block,H_vec,S_block,S,splines,bas%syms(2),max_k,Rk,R_p,H_spc,S_spc)
+    !call H_spc%convert(H_spr)
+    call S_spc%convert(S_spr)
+    !write(6,*) "Sparsity H: ", real(H_spr%nnz)/(H_spr%shape(1)**2)
+    write(6,*) "Sparsity S: ", real(S_spr%nnz)/(S_spr%shape(1)**2)
+
+    allocate(H_diag(bas%n_sym),S_diag(bas%n_sym))
+    !$omp parallel do
+    do i = 1,bas%n_sym
+        call construct_block_tensor(H_block,H_vec,S_block,S,splines,bas%syms(i),max_k,Rk,R_p,H_diag(i),S_diag(i))
+    end do
+    !$omp end parallel do
+
+    deallocate(R_p)
+
+    ! write(6,*) H_spc%data(1),H_spr%data(1), "Hej!"
+    ! write(6,*) H_block%data(1,1),S_block%data(1,1)
+    ! write(6,*) H_vec(0)%data(1,1),S(1,1),2*H_vec(0)%data(1,1)*S(1,1),S(1,1)**2
 
     open(unit=1,file='H_test.dat')
     !H_block%data=abs(H_block%data-transpose(H_block%data))
-    do i = 1,bas%syms(5)%n_config
+    do i = 1,bas%syms(2)%n_config
         write(1,*) abs(H_block%data(i,:))
     end do
     close(1)
     open(unit=1,file='S_test.dat')
-    do i = 1,bas%syms(5)%n_config
+    do i = 1,bas%syms(2)%n_config
         write(1,*) abs(S_block%data(i,:))
     end do
     close(1)
 
-    write(6,*) "Check of symmetry, H: ", maxval(abs(H_block%data-transpose(H_block%data)))
-    write(6,*) "Check of symmetry, S: ", maxval(abs(S_block%data-transpose(S_block%data)))
+    !call H_spr%store('H_csr.dat')
+    call H_spr%load('H_csr.dat')
+
+    !write(6,*) "Check of symmetry, H: ", maxval(abs(H_block%data-transpose(H_block%data)))
+    !write(6,*) "Check of symmetry, S: ", maxval(abs(S_block%data-transpose(S_block%data)))
+
+    ! deallocate(H,S)
+    ! call H_spr%get_dense(H)
+    ! call S_spr%get_dense(S)
+    ! write(6,*) maxval(abs(H-H_block%data)),maxval(abs(S-S_block%data)),H_spr%index_ptr(H_spr%shape(1)+1)
+    call FEAST(H_block%data,S_block%data,H_spr,S_spr,dcmplx(-2.5d0,0.0d0),0.6d0,eigs,vecs,i)
 
     !write(6,*) H_block%data(702,666),H_block%data(666,702)
     ! do i = 1,bas%syms(1)%n_config
@@ -300,15 +330,15 @@ program mat_els_test
     ! write(6,*) 'Time for diag and sort (s): ', t_end-t_start
     ! write(6,*) eigs(1),eigs(2)
 
-    deallocate(eigs,vecs)
-    allocate(eigs(bas%syms(5)%n_config),vecs(bas%syms(5)%n_config,bas%syms(5)%n_config))
+    ! deallocate(eigs,vecs)
+    ! allocate(eigs(bas%syms(8)%n_config),vecs(bas%syms(8)%n_config,bas%syms(8)%n_config))
 
-    t_start = omp_get_wtime()
-    call eig_general(H_block%data,S_block%data,eigs,vecs)
-    call sort_eig(bas%syms(5)%n_config,eigs,vecs)
-    t_end = omp_get_wtime()
-    write(6,*) 'Time for diag and sort (s): ', t_end-t_start
-    write(6,*) eigs(1),eigs(2)
+    ! t_start = omp_get_wtime()
+    ! call eig_general(H,S,eigs,vecs)
+    ! call sort_eig(bas%syms(8)%n_config,eigs,vecs)
+    ! t_end = omp_get_wtime()
+    ! write(6,*) 'Time for diag and sort (s): ', t_end-t_start
+    ! write(6,*) eigs(1),eigs(2)
 
     ! deallocate(eigs,vecs)
     ! allocate(eigs(splines%n_b),vecs(splines%n_b,splines%n_b))
