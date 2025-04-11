@@ -366,8 +366,10 @@ contains
         this%shape = shape
         this%nnz = nnz
 
-        allocate(this%indices(nnz),this%index_ptr(this%ptr_size()),source = 0)
-        allocate(this%data(nnz),source = dcmplx(0.d0,0.d0))
+        if (nnz>0) then
+            allocate(this%indices(nnz),this%index_ptr(this%ptr_size()),source = 0)
+            allocate(this%data(nnz),source = dcmplx(0.d0,0.d0))
+        end if
     end subroutine init_CS
 
     !> Subroutine that sets the data array components

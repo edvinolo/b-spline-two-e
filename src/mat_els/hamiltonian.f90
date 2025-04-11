@@ -113,7 +113,7 @@ contains
         integer, intent(in) :: max_k
         type(sparse_Slater), intent(in) :: Rk
         double precision, dimension(:,:,:,:,:), allocatable,intent(in) :: R_k
-        type(CSC_matrix), intent(out) :: H_sp,S_sp
+        class(CS_matrix), intent(out) :: H_sp,S_sp
 
         logical :: both
         integer :: i,j,k,ptr
@@ -122,7 +122,7 @@ contains
         type(config), dimension(2) :: confs,confs_ex
         !double precision, dimension(:,:,:,:,:), allocatable :: R_k
         integer, dimension(2) :: nnz
-        integer :: col_ptr_H,col_ptr_S
+        integer :: row_ptr_H,row_ptr_S
         logical :: support,support_ex,l_eq,l_eq_ex,r_12_allowed
         double precision :: ang,ang_ex
 
@@ -136,11 +136,25 @@ contains
         !     end do
         ! end do
 
+        select type(H_sp)
+        type is (CSR_matrix)
+        class default
+            write(6,*) "H_sp must be CSR_matrix"
+            stop
+        end select
+
+        select type(S_sp)
+        type is (CSR_matrix)
+        class default
+            write(6,*) "S_sp must be CSR_matrix"
+            stop
+        end select
+
         nnz = count_nnz(b_splines,term,max_k)
         call H_sp%init([term%n_config,term%n_config],nnz(1))
         call S_sp%init([term%n_config,term%n_config],nnz(2))
-        col_ptr_H = 1
-        col_ptr_S = 1
+        row_ptr_H = 1
+        row_ptr_S = 1
         H_sp%index_ptr(1) = 1
         S_sp%index_ptr(1) = 1
 
@@ -189,22 +203,22 @@ contains
                         if (r_12_allowed) then
                             !H_block%data(j,i) = H_block%data(j,i) + c_mat_neq_tens(term%l,confs,&
                             !n_a,n_b,n_c,n_d,max_k,Rk,0,R_k)
-                            H_sp%data(col_ptr_H) = H_sp%data(col_ptr_H) + c_mat_neq_tens(term%l,confs,&
+                            H_sp%data(row_ptr_H) = H_sp%data(row_ptr_H) + c_mat_neq_tens(term%l,confs,&
                             n_a,n_b,n_c,n_d,max_k,Rk,0,R_k)
                         end if
 
                         if ((support.and.l_eq).or.(support_ex.and.l_eq_ex)) then
                             !H_block%data(j,i) = H_block%data(j,i) + H_1p_neq(confs,term%l,H,S)
                             !S_block%data(j,i) = S_block%data(j,i) + S_mat_neq(confs,term%l,S)
-                            H_sp%data(col_ptr_H) = H_sp%data(col_ptr_H) + H_1p_neq(confs,term%l,H,S)
-                            S_sp%data(col_ptr_S) = S_sp%data(col_ptr_S) + S_mat_neq(confs,term%l,S)
-                            S_sp%indices(col_ptr_S) = j
-                            col_ptr_S = col_ptr_S + 1
+                            H_sp%data(row_ptr_H) = H_sp%data(row_ptr_H) + H_1p_neq(confs,term%l,H,S)
+                            S_sp%data(row_ptr_S) = S_sp%data(row_ptr_S) + S_mat_neq(confs,term%l,S)
+                            S_sp%indices(row_ptr_S) = j
+                            row_ptr_S = row_ptr_S + 1
                         end if
 
                         if (r_12_allowed.or.l_eq.or.l_eq_ex) then
-                            H_sp%indices(col_ptr_H) = j
-                            col_ptr_H = col_ptr_H + 1
+                            H_sp%indices(row_ptr_H) = j
+                            row_ptr_H = row_ptr_H + 1
                         end if
                         r_12_allowed = .false.
                     end if
@@ -214,8 +228,8 @@ contains
                     ! H_block%data(j,i) = H_block%data(j,i) + H_1p_neq(confs,term%l,H,S)
                     ! S_block%data(j,i) = S_block%data(j,i) + S_mat_neq(confs,term%l,S)
                 end do
-                H_sp%index_ptr(i+1) = col_ptr_H
-                S_sp%index_ptr(i+1) = col_ptr_S
+                H_sp%index_ptr(i+1) = row_ptr_H
+                S_sp%index_ptr(i+1) = row_ptr_S
             end do
         else
             !!$omp parallel do schedule(dynamic) shared(H_block,S_block,H,S) private(j,confs,both,n_a,n_b,l_a,l_b,n_c,n_d,l_c,l_d)
@@ -258,38 +272,38 @@ contains
                             if (r_12_allowed) then
                                 ! H_block%data(j,i) = H_block%data(j,i) + c_mat_neq_tens(term%l,confs,&
                                 ! n_a,n_b,n_c,n_d,max_k,Rk,0,R_k)
-                                H_sp%data(col_ptr_H) = H_sp%data(col_ptr_H) + c_mat_neq_tens(term%l,confs,&
+                                H_sp%data(row_ptr_H) = H_sp%data(row_ptr_H) + c_mat_neq_tens(term%l,confs,&
                                 n_a,n_b,n_c,n_d,max_k,Rk,0,R_k)
                             end if
 
                             if ((support.and.l_eq).or.(support_ex.and.l_eq_ex)) then
                                 ! H_block%data(j,i) = H_block%data(j,i) + H_1p_neq(confs,term%l,H,S)
                                 ! S_block%data(j,i) = S_block%data(j,i) + S_mat_neq(confs,term%l,S)
-                                H_sp%data(col_ptr_H) = H_sp%data(col_ptr_H) + H_1p_neq(confs,term%l,H,S)
-                                S_sp%data(col_ptr_S) = S_sp%data(col_ptr_S) + S_mat_neq(confs,term%l,S)
-                                S_sp%indices(col_ptr_S) = j
-                                col_ptr_S = col_ptr_S + 1
+                                H_sp%data(row_ptr_H) = H_sp%data(row_ptr_H) + H_1p_neq(confs,term%l,H,S)
+                                S_sp%data(row_ptr_S) = S_sp%data(row_ptr_S) + S_mat_neq(confs,term%l,S)
+                                S_sp%indices(row_ptr_S) = j
+                                row_ptr_S = row_ptr_S + 1
                             end if
                         else
                             if (r_12_allowed) then
                                 ! H_block%data(j,i) = H_block%data(j,i) + c_mat_neq_tens(term%l,confs,&
                                 ! n_a,n_b,n_c,n_d,max_k,Rk,0,R_k)
-                                H_sp%data(col_ptr_H) = H_sp%data(col_ptr_H) + c_mat_neq_tens(term%l,confs,&
+                                H_sp%data(row_ptr_H) = H_sp%data(row_ptr_H) + c_mat_neq_tens(term%l,confs,&
                                 n_a,n_b,n_c,n_d,max_k,Rk,0,R_k)
                             end if
 
                             if ((support.and.l_eq).or.(support_ex.and.l_eq_ex)) then
                                 ! H_block%data(j,i) = H_block%data(j,i) + H_1p_neq(confs,term%l,H,S)
                                 ! S_block%data(j,i) = S_block%data(j,i) + S_mat_neq(confs,term%l,S)
-                                H_sp%data(col_ptr_H) = H_sp%data(col_ptr_H) + H_1p_neq(confs,term%l,H,S)
-                                S_sp%data(col_ptr_S) = S_sp%data(col_ptr_S) + S_mat_neq(confs,term%l,S)
-                                S_sp%indices(col_ptr_S) = j
-                                col_ptr_S = col_ptr_S + 1
+                                H_sp%data(row_ptr_H) = H_sp%data(row_ptr_H) + H_1p_neq(confs,term%l,H,S)
+                                S_sp%data(row_ptr_S) = S_sp%data(row_ptr_S) + S_mat_neq(confs,term%l,S)
+                                S_sp%indices(row_ptr_S) = j
+                                row_ptr_S = row_ptr_S + 1
                             end if
                         end if
                         if (r_12_allowed.or.l_eq.or.l_eq_ex) then
-                            H_sp%indices(col_ptr_H) = j
-                            col_ptr_H = col_ptr_H + 1
+                            H_sp%indices(row_ptr_H) = j
+                            row_ptr_H = row_ptr_H + 1
                         end if
                         r_12_allowed = .false.
                     end if
@@ -297,8 +311,8 @@ contains
                     !S_block%data(i,j) = S_block%data(j,i)
                     !write(6,*) n_a,n_b,n_c,n_d,l_a,l_b,l_c,l_d, H_block%data(i,j)
                 end do
-                H_sp%index_ptr(i+1) = col_ptr_H
-                S_sp%index_ptr(i+1) = col_ptr_S
+                H_sp%index_ptr(i+1) = row_ptr_H
+                S_sp%index_ptr(i+1) = row_ptr_S
             end do
             !!$omp end parallel do
         end if

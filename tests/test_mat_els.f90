@@ -40,7 +40,7 @@ program mat_els_test
     integer, dimension(2) :: nnz
     type(CSC_matrix) H_spc,S_spc
     type(CSR_matrix) H_spr,S_spr
-    type(CSC_matrix), dimension(:), allocatable :: H_diag,S_diag
+    type(block_diag_CS) :: H_diag,S_diag
 
     !for ploting orbitals
     double complex, dimension(:), allocatable :: vals
@@ -267,25 +267,26 @@ program mat_els_test
     write(6,*) res
     !stop
 
-    call bas%init(4,3,splines%n_b,.true.,eigs_v)
+    call bas%init(2,3,splines%n_b,.true.,eigs_v)
     call H_block%init(bas%syms(2)%n_config,bas%syms(2)%n_config,.true.)
     call S_block%init(bas%syms(2)%n_config,bas%syms(2)%n_config,.true.)
     write(6,*) bas%syms(1)%l,bas%syms(1)%m,bas%syms(1)%pi,bas%syms(1)%n_config
     nnz = count_nnz(splines,bas%syms(2),max_k)
     write(6,*) "nnz: ",nnz
     !call construct_block(H_block,bas%syms(1),eigs_v,vecs_v,max_k,Rk)
-    call construct_block_tensor(H_block,H_vec,S_block,S,splines,bas%syms(2),max_k,Rk,R_p,H_spc,S_spc)
-    !call H_spc%convert(H_spr)
-    call S_spc%convert(S_spr)
+    call construct_block_tensor(H_block,H_vec,S_block,S,splines,bas%syms(2),max_k,Rk,R_p,H_spr,S_spr)
     !write(6,*) "Sparsity H: ", real(H_spr%nnz)/(H_spr%shape(1)**2)
     write(6,*) "Sparsity S: ", real(S_spr%nnz)/(S_spr%shape(1)**2)
 
-    allocate(H_diag(bas%n_sym),S_diag(bas%n_sym))
+    call H_diag%init(bas%n_sym,H_spr)
+    call S_diag%init(bas%n_sym,S_spr)
     !$omp parallel do
     do i = 1,bas%n_sym
-        call construct_block_tensor(H_block,H_vec,S_block,S,splines,bas%syms(i),max_k,Rk,R_p,H_diag(i),S_diag(i))
+        call construct_block_tensor(H_block,H_vec,S_block,S,splines,bas%syms(i),max_k,Rk,R_p,H_diag%blocks(i),S_diag%blocks(i))
     end do
     !$omp end parallel do
+    call H_diag%compute_shape()
+    call S_diag%compute_shape()
 
     deallocate(R_p)
 
@@ -306,7 +307,7 @@ program mat_els_test
     close(1)
 
     !call H_spr%store('H_csr.dat')
-    call H_spr%load('H_csr.dat')
+    !call H_spr%load('H_csr.dat')
 
     !write(6,*) "Check of symmetry, H: ", maxval(abs(H_block%data-transpose(H_block%data)))
     !write(6,*) "Check of symmetry, S: ", maxval(abs(S_block%data-transpose(S_block%data)))
@@ -315,6 +316,13 @@ program mat_els_test
     ! call H_spr%get_dense(H)
     ! call S_spr%get_dense(S)
     ! write(6,*) maxval(abs(H-H_block%data)),maxval(abs(S-S_block%data)),H_spr%index_ptr(H_spr%shape(1)+1)
+    call H_spr%deall()
+    call S_spr%deall()
+    call H_diag%store('H_diag.dat')
+    call H_diag%deall()
+    call H_diag%load('H_diag.dat')
+    call H_diag%to_CS(H_spr,.true.)
+    call S_diag%to_CS(S_spr,.true.)
     call FEAST(H_block%data,S_block%data,H_spr,S_spr,dcmplx(-2.5d0,0.0d0),0.6d0,eigs,vecs,i)
 
     !write(6,*) H_block%data(702,666),H_block%data(666,702)
