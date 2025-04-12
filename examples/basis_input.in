@@ -1,0 +1,4 @@
+&basis_input
+basis_output_dir = 'basis_output'
+gauge = 'v'
+/
