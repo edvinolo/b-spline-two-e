@@ -23,6 +23,8 @@ module orbital_tools
         type(sym), dimension(:), allocatable :: syms
     contains
         procedure :: init => init_basis
+        procedure :: store => store_basis
+        procedure :: load => load_basis
     end type basis
 contains
 
@@ -201,7 +203,7 @@ contains
         if (z_pol) then
             do l = 1,max_L
                 this%syms(ptr)%l = l
-                this%syms(ptr)%m = m
+                this%syms(ptr)%m = 0
                 this%syms(ptr)%pi = (mod(l,2)/=0)
                 !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
                 this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,eigs)
@@ -227,4 +229,52 @@ contains
             end do
         end if
     end subroutine init_basis
+
+    subroutine store_basis(this,loc)
+        class(basis), intent(in) :: this
+        character(len=*), intent(in) ::  loc
+
+        integer :: i, unit
+        character(len=:), allocatable :: format_header,format_data
+
+        open(file = loc//"basis.dat", newunit = unit, action = 'write', form = "unformatted")
+        write(unit) this%n_sym
+        do i = 1, this%n_sym
+            write(unit) this%syms(i)%l
+            write(unit) this%syms(i)%m
+            write(unit) this%syms(i)%pi
+            write(unit) this%syms(i)%n_config
+            write(unit) this%syms(i)%configs
+        end do
+        close(unit)
+
+        format_header = "(a5,a5,a5,a5,a9)"
+        format_data = "(i5,i5,i5,l5,i9)"
+        open(file = loc//"basis_info.txt", newunit = unit, action = 'write')
+        write(unit,format_header) "# Sym", "L", "M", "Pi", "states"
+        do i = 1,this%n_sym
+            write(unit,format_data) i, this%syms(i)%l, this%syms(i)%m, this%syms(i)%pi, this%syms(i)%n_config
+        end do
+        close(unit)
+    end subroutine store_basis
+
+    subroutine load_basis(this,loc)
+        class(basis), intent(inout) :: this
+        character(len=*), intent(in) ::  loc
+
+        integer :: i, unit
+
+        open(file = loc//"basis.dat", newunit = unit, action = 'read', form = "unformatted")
+        read(unit) this%n_sym
+        allocate(this%syms(this%n_sym))
+        do i = 1, this%n_sym
+            read(unit) this%syms(i)%l
+            read(unit) this%syms(i)%m
+            read(unit) this%syms(i)%pi
+            read(unit) this%syms(i)%n_config
+            allocate(this%syms(i)%configs(this%syms(i)%n_config))
+            read(unit) this%syms(i)%configs
+        end do
+        close(unit)
+    end subroutine load_basis
 end module orbital_tools

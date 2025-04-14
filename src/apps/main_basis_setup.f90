@@ -4,6 +4,7 @@ program main_basis_setup
     use grid_tools
     use bspline_tools
     use block_tools
+    use orbital_tools
     use potentials
     use CAP_tools
     use mat_els
@@ -95,10 +96,12 @@ program main_basis_setup
 
     deallocate(R_p)
 
+    ! Store Matrix elements and basis information
     call make_res_dir(basis_root_dir,basis_res_dir)
     call H_diag%store(basis_res_dir//'H_diag.dat')
     call S_diag%store(basis_res_dir//'S_diag.dat')
     call write_basis_input(basis_res_dir)
+    call bas%store(basis_res_dir)
 
     t_prog_end = omp_get_wtime()
     write(6,*) "Total time for basis setup (s): ", t_prog_end - t_prog_start
