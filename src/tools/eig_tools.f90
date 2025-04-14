@@ -1,7 +1,7 @@
 module eig_tools
     use sparse_array_tools, only: CSR_matrix,CSC_matrix
     use stdlib_linalg_lapack, only: ggev
-    use stdlib_linalg_blas, only: dotc,dotu,gemv
+    use stdlib_linalg_blas, only: dotu,gemv
     use stdlib_sorting, only: sort_index
     use iso_fortran_env, only: stderr => error_unit
     use omp_lib, only: omp_get_wtime

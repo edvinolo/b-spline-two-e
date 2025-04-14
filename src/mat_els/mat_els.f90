@@ -1,7 +1,6 @@
 module mat_els
     use quad_tools
     use bspline_tools
-    use grid_tools
     use sparse_array_tools
     use block_tools
     use potentials

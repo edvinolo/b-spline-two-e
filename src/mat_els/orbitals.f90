@@ -6,7 +6,6 @@ module orbitals
     use block_tools
     use eig_tools
     use mat_els
-    use stdlib_linalg, only: eig
     implicit none
 contains
     subroutine find_orbitals(b_splines,k_GL,pot,CAP_c,max_l,eigs,vecs)
@@ -33,7 +32,6 @@ contains
             call H_vec(l)%init(b_splines%n_b,b_splines%n_b,.true.)
             call vecs(l)%init(b_splines%n_b,b_splines%n_b,.true.)
             call setup_H_one_particle(pot,CAP_c,l,b_splines,k_GL,H_vec(l)%data)
-            !call eig(H_vec(l)%data,S,eigs(:,l),right=vecs(l)%data,overwrite_a=.true.,overwrite_b=.false.)
             call eig_general(H_vec(l)%data,S,eigs(:,l),vecs(l)%data)
             call sort_eig(b_splines%n_b,eigs(:,l),vecs(l)%data)
             write(6,*) eigs(1,l)
