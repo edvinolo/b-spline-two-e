@@ -9,6 +9,21 @@ module mat_els
     use orbital_tools
     implicit none
 
+    abstract interface
+        subroutine rad_dip(b_splines,i,j,c_i,c_j,i_r,k_GL,r,w,radial_dip)
+            import b_spline
+            type(b_spline), intent(in) :: b_splines
+            integer, intent(in) :: i
+            integer, intent(in) :: j
+            double precision, dimension(b_splines%n), intent(in) :: c_i
+            double precision, dimension(b_splines%n), intent(in) :: c_j
+            integer, intent(in) :: i_r
+            integer, intent(in) :: k_GL
+            double precision, dimension(k_GL), intent(in) :: r
+            double precision, dimension(k_GL), intent(in) :: w
+            double complex, dimension(:,:), intent(out) :: radial_dip
+        end subroutine rad_dip
+    end interface
 contains
     subroutine setup_H_one_particle(potential,CAP_c,l,b_splines,k_GL,H)
         class(sph_pot), intent(in) :: potential
@@ -82,6 +97,55 @@ contains
             end do
         end do
     end subroutine setup_S
+
+    subroutine setup_radial_dip(b_splines,k_GL,radial_dip,gauge)
+        type(b_spline), intent(in) :: b_splines
+        integer, intent(in) :: k_GL
+        double complex, dimension(:,:), intent(out) ::  radial_dip
+        character, intent(in) :: gauge
+
+        integer :: i_b,j_b,i_r
+        double precision, dimension(:), allocatable :: c_i,c_j
+        type(gau_leg) :: g_l
+
+        procedure(rad_dip), pointer :: compute_radial_dip
+
+        if (gauge == 'l') then
+            compute_radial_dip => compute_radial_dip_len
+        else if (gauge == 'v') then
+            compute_radial_dip => compute_radial_dip_vel
+        else
+            write(6,*) "Error! Unrecognized gauge option in for radial dipole: ", gauge
+            stop
+        end if
+
+        radial_dip = 0.d0
+
+        call g_l%init(b_splines%breakpoints,k_GL)
+        allocate(c_i(b_splines%n),c_j(b_splines%n))
+        c_j = 0.d0
+
+        do j_b = 1, b_splines%n-2
+            c_j(j_b+1) = 1.d0
+            c_j(j_b) = 0.d0
+
+            c_i = 0.d0
+            do i_b = 1, b_splines%n-2
+                c_i(i_b+1) = 1.d0
+                c_i(i_b) = 0.d0
+
+                if (abs(j_b-i_b)>=b_splines%k) then
+                    cycle
+                end if
+
+                do i_r = 1, size(b_splines%breakpoints)-1
+                    if (b_splines%support(i_r,i_b+1).and.b_splines%support(i_r,j_b+1)) then
+                        call compute_radial_dip(b_splines,i_b,j_b,c_i,c_j,i_r,k_GL,g_l%x(:,i_r),g_l%w(:,i_r),radial_dip)
+                    end if
+                end do
+            end do
+        end do
+    end subroutine
 
     subroutine setup_Slater_integrals(b_splines,max_k,k_GL,r_k,r_m_k,r_d_k)
         type(b_spline), intent(in) :: b_splines
@@ -259,7 +323,7 @@ contains
 
     end subroutine compute_S
 
-    subroutine compute_radial_dip(b_splines,i,j,c_i,c_j,i_r,k_GL,r,w,r_mat,dr_mat)
+    subroutine compute_radial_dip_len(b_splines,i,j,c_i,c_j,i_r,k_GL,r,w,radial_dip)
         type(b_spline), intent(in) :: b_splines
         integer, intent(in) :: i
         integer, intent(in) :: j
@@ -269,19 +333,37 @@ contains
         integer, intent(in) :: k_GL
         double precision, dimension(k_GL), intent(in) :: r
         double precision, dimension(k_GL), intent(in) :: w
-        double complex, dimension(:,:), intent(out) :: r_mat
-        double complex, dimension(:,:), intent(out) :: dr_mat
+        double complex, dimension(:,:), intent(out) :: radial_dip
 
         integer :: i_sum
-        double precision :: B_i,B_j,D_B_j
+        double precision :: B_i,B_j
         do i_sum = 1, k_GL
             B_i = b_splines%eval_d(r(i_sum),c_i,i_r)
             B_j = b_splines%eval_d(r(i_sum),c_j,i_r)
-            D_B_j = b_splines%d_eval_d(r(i_sum),c_j,1,i_r)
-            r_mat(i,j) = r_mat(i,j) + w(i_sum)*r(i_sum)*B_i*B_j
-            dr_mat(i,j) = dr_mat(i,j) + dcmplx(0.d0,-1.d0)*w(i_sum)*B_i*D_B_j
+            radial_dip(i,j) = radial_dip(i,j) + w(i_sum)*r(i_sum)*B_i*B_j
         end do
-    end subroutine compute_radial_dip
+    end subroutine compute_radial_dip_len
+
+    subroutine compute_radial_dip_vel(b_splines,i,j,c_i,c_j,i_r,k_GL,r,w,radial_dip)
+        type(b_spline), intent(in) :: b_splines
+        integer, intent(in) :: i
+        integer, intent(in) :: j
+        double precision, dimension(b_splines%n), intent(in) :: c_i
+        double precision, dimension(b_splines%n), intent(in) :: c_j
+        integer, intent(in) :: i_r
+        integer, intent(in) :: k_GL
+        double precision, dimension(k_GL), intent(in) :: r
+        double precision, dimension(k_GL), intent(in) :: w
+        double complex, dimension(:,:), intent(out) :: radial_dip
+
+        integer :: i_sum
+        double precision :: B_i,D_B_j
+        do i_sum = 1, k_GL
+            B_i = b_splines%eval_d(r(i_sum),c_i,i_r)
+            D_B_j = b_splines%d_eval_d(r(i_sum),c_j,1,i_r)
+            radial_dip(i,j) = radial_dip(i,j) + dcmplx(0.d0,-1.d0)*w(i_sum)*B_i*D_B_j
+        end do
+    end subroutine compute_radial_dip_vel
 
     subroutine compute_Slater_off_diag(b_splines,i_r,i,j,c_i,c_j,k_GL,x,w,limits,k,ptr,r_k,r_m_k)
         type(b_spline), intent(in) :: b_splines
@@ -602,4 +684,94 @@ contains
             *(-1)**(L+sum(confs(2)%l))
         end if
     end function H_1p_neq
+
+    pure function dip_mat_neq(syms,confs,S,radial_dip) result(res)
+        type(sym), dimension(2), intent(in) :: syms
+        type(config), dimension(2), intent(in) :: confs
+        double complex, dimension(:,:), intent(in) :: S
+        double complex, dimension(:,:), intent(in) :: radial_dip
+        double complex ::  res
+
+        double complex :: red_mat, red_mat_ex
+        type(config), dimension(2) :: confs_ex
+
+        ! Compute the reduced matrix element part
+        red_mat = dip_red_mat(syms(1)%l,syms(2)%l,confs,S,radial_dip)
+
+        ! Compute the exchange part of the reduced matrix element
+        confs_ex(1) = confs(1)
+        confs_ex(2)%n = confs(2)%n([2,1])
+        confs_ex(2)%l = confs(2)%l([2,1])
+        red_mat_ex = dip_red_mat(syms(1)%l,syms(2)%l,confs_ex,S,radial_dip)
+
+        res = red_mat + red_mat_ex
+    end function dip_mat_neq
+
+    pure function dip_red_mat(L_1,L_2,confs,S,radial_dip) result(res)
+        integer, intent(in) :: L_1
+        integer, intent(in) :: L_2
+        type(config), dimension(2), intent(in) :: confs
+        double complex, dimension(:,:), intent(in) :: S
+        double complex, dimension(:,:), intent(in) :: radial_dip
+        double complex :: res
+
+        double complex :: res_1, res_2
+
+        res_1 = 0.d0
+        res_2 = 0.d0
+
+        ! These are derived from Lindgren and Morrison Eq. (4.23)
+        if (confs(1)%l(2) == confs(2)%l(2)) then
+            res_1 = (-1)**(confs(1)%l(1) + confs(1)%l(2) + L_2 + 1) &
+                *sqrt(real((2*L_1+1)*(2*L_2+1),kind=8)) &
+                *six_j(L_1,1,L_2,confs(2)%l(1),confs(1)%l(2),confs(1)%l(1)) &
+                *dip_red_1p(confs,1,radial_dip) &
+                *S(confs(1)%n(2),confs(2)%n(2))
+        end if
+
+        if (confs(1)%l(1) == confs(2)%l(1)) then
+            res_2 = (-1)**(confs(1)%l(1) + confs(2)%l(2) + L_1 + 1) &
+                *sqrt(real((2*L_1+1)*(2*L_2+1),kind=8)) &
+                *six_j(L_1,1,L_2,confs(2)%l(2),confs(1)%l(1),confs(1)%l(2)) &
+                *dip_red_1p(confs,2,radial_dip) &
+                *S(confs(1)%n(1),confs(2)%n(1))
+        end if
+
+        res = res_1 + res_2
+    end function dip_red_mat
+
+    pure function dip_red_1p(confs,i,radial_dip) result(res)
+        type(config), dimension(2), intent(in) :: confs
+        integer, intent(in) :: i
+        double complex, dimension(:,:), intent(in) :: radial_dip
+        double complex :: res
+
+        integer :: n,n_p,l,l_p
+
+        n = confs(1)%n(i)
+        n_p = confs(2)%n(i)
+        l = confs(1)%l(i)
+        l_p = confs(2)%l(i)
+
+        res = radial_dip(n,n_p)*C_red_mat(1,l,l_p)
+    end function dip_red_1p
+
+    pure function ang_dip_red(L_1,L_2,confs) result(res)
+        integer, intent(in) :: L_1
+        integer, intent(in) :: L_2
+        type(config), dimension(2), intent(in) :: confs
+        double precision :: res
+
+        res = 0.d0
+
+        if (confs(1)%l(2) == confs(2)%l(2)) then
+            res = res + abs(six_j(L_1,1,L_2,confs(2)%l(1),confs(1)%l(2),confs(1)%l(1)) &
+            *C_red_mat(1,confs(1)%l(1),confs(2)%l(1)))
+        end if
+
+        if (confs(1)%l(1) == confs(2)%l(1)) then
+            res = res + abs(six_j(L_1,1,L_2,confs(2)%l(2),confs(1)%l(1),confs(1)%l(2)) &
+            *C_red_mat(1,confs(1)%l(2),confs(2)%l(2)))
+        end if
+    end function ang_dip_red
 end module mat_els

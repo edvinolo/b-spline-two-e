@@ -1,5 +1,5 @@
 module eig_tools
-    use sparse_array_tools, only: CSR_matrix,CSC_matrix
+    use sparse_array_tools, only: CSR_matrix,CSC_matrix,CS_matrix,CSR_mv
     use stdlib_linalg_lapack, only: ggev
     use stdlib_linalg_blas, only: dotu,gemv
     use stdlib_sorting, only: sort_index
@@ -117,8 +117,8 @@ contains
     subroutine FEAST(H,S,A,B,mid,rad,eigs,vecs,M)
         double complex, dimension(:,:), intent(in) :: H
         double complex, dimension(:,:), intent(in) :: S
-        type(CSR_matrix), intent(inout) :: A
-        type(CSR_matrix), intent(inout) :: B
+        class(CS_matrix), intent(inout) :: A
+        class(CS_matrix), intent(inout) :: B
         double complex, intent(in) :: mid
         double precision, intent(in) :: rad
         double complex, dimension(:), allocatable, intent(inout) :: eigs
@@ -130,6 +130,22 @@ contains
         integer :: M_0,loop,info,i
         double precision, dimension(:), allocatable :: res
         integer, dimension(64) :: fpm
+
+        double complex, dimension(:), allocatable :: temp_V
+
+        select type(A)
+        type is (CSR_matrix)
+        class default
+            write(6,*) "A must be CSR_matrix"
+            stop
+        end select
+
+        select type(B)
+        type is (CSR_matrix)
+        class default
+            write(6,*) "B must be CSR_matrix"
+            stop
+        end select
 
         call feastinit(fpm)
         fpm(1) = 1
@@ -157,6 +173,17 @@ contains
 
         do i = 1,M
             write(6,*) eigs(i)
+        end do
+
+        allocate(temp_V(B%shape(1)))
+        ! Normalize the eigenvectors.
+        ! It seems like FEAST already normalizes them correctly, but I don't see anything in the docs that mentions this.
+        do i=1,M
+            ! Should use a sparse gemv routine here!
+            ! call gemv('N',B%s,N,dcmplx(1.d0,0.d0),B,N,vecs(:,i),1,dcmplx(0.d0,0.d0),temp_v,1)
+            call CSR_mv(B,vecs(:,i),temp_V)
+            ! write(6,*) sqrt(dotu(B%shape(1),vecs(:,i),1,temp_v,1))
+            vecs(:,i) = vecs(:,i)/sqrt(dotu(B%shape(1),vecs(:,i),1,temp_v,1))
         end do
 
     end subroutine FEAST

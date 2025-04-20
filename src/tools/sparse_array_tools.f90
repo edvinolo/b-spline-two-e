@@ -612,4 +612,39 @@ contains
             end if
         end do
     end subroutine CSC_get_dense
+
+    subroutine CSR_mv(A,x,y)
+        class(CS_matrix), intent(in) :: A
+        double complex, dimension(:), intent(in) :: x
+        double complex, dimension(:), intent(inout) :: y
+
+        integer :: i,j
+
+        select type(A)
+        type is (CSR_matrix)
+        class default
+            write(6,*) "Error in CSR_mv! A must be CSR_matrix"
+            stop
+        end select
+
+        if ((A%shape(2)/=size(x)).or.(A%shape(1)/=size(y))) then
+            write(6,*) "Error! Incompatible array sizes in CSR_mv!"
+            write(6,*) "A shape: ", A%shape
+            write(6,*) "x shape: ", size(x)
+            write(6,*) "y shape: ", size(y)
+            stop
+        end if
+
+        y = 0.d0
+
+        if (A%nnz == 0) return
+
+        !$omp parallel do private(j)
+        do i = 1,A%shape(1)
+            do j = A%index_ptr(i),A%index_ptr(i+1)-1
+                y(i) = y(i) + A%data(j)*x(A%indices(j))
+            end do
+        end do
+        !$omp end parallel do
+    end subroutine CSR_mv
 end module sparse_array_tools

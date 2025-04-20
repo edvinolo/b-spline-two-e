@@ -165,15 +165,17 @@ contains
         call blocks%compute_shape()
         call CS%init(blocks%shape,nnz)
 
-        select type(CS)
-        type is(CSR_matrix)
-            call CSR_from_block(blocks,CS)
-        type is(CSC_matrix)
-            call CSC_from_block(blocks,CS)
-        class default
-            write(6,*) "blocks must be CSR_matrix or CSC_matrix"
-            stop
-        end select
+        if (nnz /= 0) then
+            select type(CS)
+            type is(CSR_matrix)
+                call CSR_from_block(blocks,CS)
+            type is(CSC_matrix)
+                call CSC_from_block(blocks,CS)
+            class default
+                write(6,*) "blocks must be CSR_matrix or CSC_matrix"
+                stop
+            end select
+        end if
 
         if (deall_block) then
             do j = 1,blocks%block_shape(2)
@@ -283,15 +285,17 @@ contains
         call blocks%compute_shape()
         call CS%init(blocks%shape,nnz)
 
-        select type(CS)
-        type is(CSR_matrix)
-            call CSR_from_block_diag(blocks,CS)
-        type is (CSC_matrix)
-            call CSC_from_block_diag(blocks,CS)
-        class default
-            write(6,*) "blocks must be CSR_matrix or CSC_matrix"
-            stop
-        end select
+        if (nnz /= 0) then
+            select type(CS)
+            type is(CSR_matrix)
+                call CSR_from_block_diag(blocks,CS)
+            type is (CSC_matrix)
+                call CSC_from_block_diag(blocks,CS)
+            class default
+                write(6,*) "blocks must be CSR_matrix or CSC_matrix"
+                stop
+            end select
+        end if
 
 
         if (deall_block) then
@@ -311,9 +315,9 @@ contains
         ptr = 1
         row = 0
 
+        col = 0
         do i = 1,blocks%block_shape(1)
             do row_i = 1, blocks%blocks(i)%shape(1)
-                col = 0
                 row = row + 1
                 CS%index_ptr(row) = ptr
 
@@ -326,9 +330,8 @@ contains
                     CS%data(CS_start:CS_end) = blocks%blocks(i)%data(start:end)
                     ptr = CS_end + 1
                 end if
-
-                col = col + blocks%blocks(i)%shape(2)
             end do
+            col = col + blocks%blocks(i)%shape(2)
         end do
         CS%index_ptr(row+1) = ptr
 
@@ -348,9 +351,9 @@ contains
         ptr = 1
         col = 0
 
+        row = 0
         do i = 1,blocks%block_shape(1)
             do col_i = 1, blocks%blocks(i)%shape(1)
-                row = 0
                 col = col + 1
                 CS%index_ptr(col) = ptr
 
@@ -363,9 +366,8 @@ contains
                     CS%data(CS_start:CS_end) = blocks%blocks(i)%data(start:end)
                     ptr = CS_end + 1
                 end if
-
-                row = row + blocks%blocks(i)%shape(2)
             end do
+            row = row + blocks%blocks(i)%shape(2)
         end do
         CS%index_ptr(col+1) = ptr
 

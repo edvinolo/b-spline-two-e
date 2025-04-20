@@ -1,4 +1,5 @@
 set(mat_els_files
+    "dipole.f90"
     "hamiltonian.f90"
     "mat_els.f90"
     "orbitals.f90"

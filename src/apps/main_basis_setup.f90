@@ -10,6 +10,7 @@ program main_basis_setup
     use mat_els
     use orbitals
     use hamiltonian
+    use dipole
     use omp_lib, only: omp_get_wtime
     implicit none
 
@@ -19,6 +20,7 @@ program main_basis_setup
     double precision, dimension(:), allocatable :: grid
     type(b_spline) :: splines
     double complex, dimension(:,:), allocatable :: S
+    double complex, dimension(:,:), allocatable :: radial_dip
     type(sparse_4d) :: r_k,r_m_k
     type(sparse_6d) :: r_d_k
     type(sparse_Slater) :: Rk
@@ -31,11 +33,13 @@ program main_basis_setup
     type(block), dimension(:), allocatable :: H_vec
     type(CSR_matrix) H_spr,S_spr
     type(block_diag_CS) :: H_diag,S_diag
+    type(block_CS), dimension(-1:1) :: dipoles
+    type(sym), dimension(2) :: syms
 
     type(hydrogenic) :: pot
     type(CAP) :: CAP_c
 
-    integer :: i
+    integer :: i,j,q
 
     double precision :: t_start,t_end,t_prog_start,t_prog_end
 
@@ -96,10 +100,37 @@ program main_basis_setup
 
     deallocate(R_p)
 
+    ! Compute dipole matrix elements
+    write(6,*)
+    write(6,*) "Constructing dipoles..."
+    allocate(radial_dip(splines%n_b,splines%n_b))
+    call setup_radial_dip(splines,k_GL,radial_dip,gauge)
+    t_start = omp_get_wtime()
+    do q = -1,1
+        call dipoles(q)%init([bas%n_sym,bas%n_sym],H_spr)
+        !$omp parallel do private(i,syms) schedule(dynamic)
+        do j = 1,bas%n_sym
+            syms(2) = bas%syms(j)
+            do i = 1,bas%n_sym
+                syms(1) = bas%syms(i)
+                call construct_dip_block_tensor(syms,q,splines,S,radial_dip,dipoles(q)%blocks(i,j))
+            end do
+        end do
+        !$omp end parallel do
+    end do
+    t_end = omp_get_wtime()
+    write(6,*) "Done!"
+    write(6,*) "Wall time for dipole construction (s): ", t_end-t_start
+    write(6,*) "Wall time for dipole construction (m): ", (t_end-t_start)/60.d0
+    write(6,*) "Wall time for dipole construction (h): ", (t_end-t_start)/3600.d0
+
     ! Store Matrix elements and basis information
     call make_res_dir(basis_root_dir,basis_res_dir)
     call H_diag%store(basis_res_dir//'H_diag.dat')
     call S_diag%store(basis_res_dir//'S_diag.dat')
+    call dipoles(-1)%store(basis_res_dir//'D_-1.dat')
+    call dipoles(0)%store(basis_res_dir//'D_0.dat')
+    call dipoles(1)%store(basis_res_dir//'D_1.dat')
     call write_basis_input(basis_res_dir)
     call bas%store(basis_res_dir)
 
