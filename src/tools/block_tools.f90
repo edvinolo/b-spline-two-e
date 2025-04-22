@@ -45,6 +45,18 @@ module block_tools
         procedure :: load => CS_block_diag_load
     end type  block_diag_CS
 
+    interface XPAY
+        module procedure CS_diag_X_P_A_block_Y
+    end interface
+
+    interface AXPBY
+        module procedure CS_A_block_X_P_B_block_Y
+    end interface
+
+    interface APX
+        module procedure CS_A_P_diag_X, CS_A_P_block_X, CS_A_diag_B_P_diag_X, CS_A_diag_B_P_block_X, &
+                         CS_A_block_B_P_block_X
+    end interface
 contains
     subroutine init_block(this,n,m,nz)
         class(block), intent(inout) :: this
@@ -534,4 +546,178 @@ contains
 
         close(1)
     end subroutine CS_block_diag_load
+
+    ! Function that returns the result of adding a block diagonal sparse matrix X to a block sparse matrix Y.
+    ! The second block matrix is assumed to have empty blocks on the diagonal.
+    ! The second matrix is scaled by alpha
+    function CS_diag_X_P_A_block_Y(X,Y,alpha) result(res)
+        type(block_diag_CS), intent(in) :: X
+        type(block_CS), intent(in) :: Y
+        double complex, intent(in) :: alpha
+        type(block_CS) :: res
+
+        integer :: i,j
+
+        if (.not.same_type_as(X%blocks(1),Y%blocks(1,1))) then
+            write(6,*) "Error in CS_diag_X_P_A_block_Y! Dynamic types of blocks are not equal"
+            stop
+        end if
+
+        if (any(X%block_shape /= Y%block_shape)) then
+            write(6,*) "Error in CS_diag_X_P_A_block_Y! Incompatible block shapes"
+            stop
+        end if
+
+        call res%init(Y%block_shape,Y%blocks(1,1))
+
+        !$omp parallel do private(i) schedule(dynamic)
+        do j = 1,Y%block_shape(2)
+            res%blocks(j,j) = X%blocks(j)
+            do i = 1,Y%block_shape(1)
+                if (i == j) cycle
+                res%blocks(i,j) = alpha*Y%blocks(i,j)
+            end do
+        end do
+        !$omp end parallel do
+    end function CS_diag_X_P_A_block_Y
+
+    ! Function that returns the result of adding a block sparse matrix X to a block sparse matrix Y.
+    ! It it assumed that X and Y do not have overlapping nonzero blocks
+    ! The second matrix is scaled by alpha
+    function CS_A_block_X_P_B_block_Y(X,alpha,Y,beta) result(res)
+        type(block_CS), intent(in) :: X
+        double complex, intent(in) :: alpha
+        type(block_CS), intent(in) :: Y
+        double complex, intent(in) :: beta
+        type(block_CS) :: res
+
+        integer :: i,j
+
+        if (.not.same_type_as(X%blocks(1,1),Y%blocks(1,1))) then
+            write(6,*) "Error in CS_A_block_X_P_B_block_Y! Dynamic types of blocks are not equal"
+            stop
+        end if
+
+        if (any(X%block_shape /= Y%block_shape)) then
+            write(6,*) "Error in CS_A_block_X_P_B_block_Y! Incompatible block shapes"
+            stop
+        end if
+
+        call res%init(Y%block_shape,Y%blocks(1,1))
+
+        !$omp parallel do private(i) schedule(dynamic)
+        do j = 1,Y%block_shape(2)
+            do i = 1,Y%block_shape(1)
+                if (X%blocks(i,j)%nnz > 0) then
+                    res%blocks(i,j) = alpha*X%blocks(i,j)
+                else if (Y%blocks(i,j)%nnz > 0) then
+                    res%blocks(i,j) = beta*Y%blocks(i,j)
+                else
+                    ! Block is zero so just do normal assignment
+                    res%blocks(i,j) = X%blocks(i,j)
+                end if
+            end do
+        end do
+        !$omp end parallel do
+    end function CS_A_block_X_P_B_block_Y
+
+    subroutine CS_A_P_diag_X(X,alpha)
+        type(block_diag_CS), intent(inout) :: X
+        double complex, dimension(:), intent(in) :: alpha
+
+        integer :: i
+
+        if (X%block_shape(1) /= size(alpha)) then
+            write(6,*) "Error in CS_A_P_diag_X! Incompatible block and alpha shapes"
+            stop
+        end if
+
+        !$omp parallel do
+        do i = 1,X%block_shape(1)
+            call X%blocks(i)%shift(alpha(i))
+        end do
+        !$omp end parallel do
+    end subroutine CS_A_P_diag_X
+
+    subroutine CS_A_P_block_X(X,alpha)
+        type(block_CS), intent(inout) :: X
+        double complex, dimension(:), intent(in) :: alpha
+
+        integer :: i
+
+        if (X%block_shape(1) /= size(alpha)) then
+            write(6,*) "Error in CS_A_P_block_X! Incompatible block and alpha shapes"
+            stop
+        end if
+
+        !$omp parallel do
+        do i = 1,X%block_shape(1)
+            call X%blocks(i,i)%shift(alpha(i))
+        end do
+        !$omp end parallel do
+    end subroutine CS_A_P_block_X
+
+    subroutine CS_A_diag_B_P_diag_X(X,alpha,B)
+        type(block_diag_CS), intent(inout) :: X
+        double complex, dimension(:), intent(in) :: alpha
+        type(block_diag_CS), intent(in) :: B
+
+        integer :: i
+
+        if (X%block_shape(1) /= size(alpha)) then
+            write(6,*) "Error in CS_A_diag_B_P_diag_X! Incompatible block and alpha shapes"
+            stop
+        end if
+
+        !!$omp parallel do
+        do i = 1,X%block_shape(1)
+            call X%blocks(i)%shift_B(alpha(i),B%blocks(i))
+        end do
+        !!$omp end parallel do
+    end subroutine CS_A_diag_B_P_diag_X
+
+    subroutine CS_A_diag_B_P_block_X(X,alpha,B)
+        type(block_CS), intent(inout) :: X
+        double complex, dimension(:), intent(in) :: alpha
+        type(block_diag_CS), intent(in) :: B
+
+        integer :: i
+
+        if (X%block_shape(1) /= size(alpha)) then
+            write(6,*) "Error in CS_A_diag_B_P_block_X! Incompatible block and alpha shapes"
+            stop
+        end if
+
+        !!$omp parallel do
+        do i = 1,X%block_shape(1)
+            call X%blocks(i,i)%shift_B(alpha(i),B%blocks(i))
+        end do
+        !!$omp end parallel do
+    end subroutine CS_A_diag_B_P_block_X
+
+    subroutine CS_A_block_B_P_block_X(X,alpha,B)
+        type(block_CS), intent(inout) :: X
+        double complex, dimension(:,:), intent(in) :: alpha
+        type(block_CS), intent(in) :: B
+
+        integer :: i,j
+
+        if (any(X%block_shape /= shape(alpha))) then
+            write(6,*) "Error in CS_A_block_B_P_block_X! Incompatible block and alpha shapes"
+            stop
+        end if
+
+        if (any(X%block_shape /= B%block_shape)) then
+            write(6,*) "Error in CS_A_block_B_P_block_X! Incompatible block and alpha shapes"
+            stop
+        end if
+
+        !!$omp parallel do private(i)
+        do j = 1,X%block_shape(2)
+            do i = 1,X%block_shape(1)
+                call X%blocks(i,j)%shift_B(alpha(i,j),B%blocks(i,j))
+            end do
+        end do
+        !!$omp end parallel do
+    end subroutine CS_A_block_B_P_block_X
 end module block_tools

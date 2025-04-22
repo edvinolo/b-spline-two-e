@@ -53,6 +53,12 @@ module sparse_array_tools
         procedure :: deall => deall_CS
         procedure :: store_CS
         procedure :: load_CS
+        procedure :: shift => shift_CS
+        procedure :: shift_B => shift_B_CS
+        procedure, pass(B) :: assign_CS
+        generic :: assignment(=) => assign_CS
+        generic :: operator(*) => scalar_mult
+        procedure(scalar_mult), pass(X), deferred :: scalar_mult
         procedure(store), deferred :: store
         procedure(load), deferred :: load
         procedure(ptr_size), deferred :: ptr_size
@@ -84,6 +90,13 @@ module sparse_array_tools
             class(CS_matrix), intent(inout) :: this
             character(len=*), intent(in) ::  loc
         end subroutine load
+
+        function scalar_mult(alpha,X) result(res)
+            import :: CS_matrix
+            double complex, intent(in) :: alpha
+            class(CS_matrix), intent(in) :: X
+            class(CS_matrix), allocatable :: res
+        end function scalar_mult
     end interface
 
     !The child types of CS_matrix. They must overwrite the deferred procedures
@@ -91,6 +104,7 @@ module sparse_array_tools
     type, extends(CS_matrix), public :: CSR_matrix
     !Stores elements row by row, with pointers to beginning of each row.
     contains
+        procedure, pass(X) :: scalar_mult => scalar_mult_CSR
         procedure :: store => CSR_store
         procedure :: load => CSR_load
         procedure :: ptr_size => CSR_ptr_size
@@ -100,6 +114,7 @@ module sparse_array_tools
     type, extends(CS_matrix), public :: CSC_matrix
     !Stores elements column by column, with pointers to beginning of each column.
     contains
+        procedure, pass(X) :: scalar_mult => scalar_mult_CSC
         procedure :: store => CSC_store
         procedure :: load => CSC_load
         procedure :: ptr_size => CSC_ptr_size
@@ -612,6 +627,130 @@ contains
             end if
         end do
     end subroutine CSC_get_dense
+
+    ! Shift the diagonal of the matrix in place. Right now only works if all diagonal elements are nonzero.
+    subroutine shift_CS(this,shift)
+        class(CS_matrix), intent(inout) :: this
+        double complex, intent(in) :: shift
+
+        integer, dimension(:), allocatable :: diag
+        integer :: i,ptr,n_diag, diag_count
+
+        n_diag = min(this%shape(1),this%shape(2))
+
+        allocate(diag(n_diag))
+
+        diag_count = 0
+        do i = 1,n_diag
+            do ptr = this%index_ptr(i),this%index_ptr(i+1)-1
+                if (i == this%indices(ptr)) then
+                    diag(i) = ptr
+                    diag_count = diag_count + 1
+                    exit
+                end if
+            end do
+        end do
+
+        if (diag_count /= n_diag) then
+            write(6,*) "Error in shift_CS diag_count /= n_diag! Changes in sparsity structure is not yet implemented."
+            stop
+        end if
+
+        write(6,*) this%data(1),this%data(this%nnz)
+        this%data(diag) = this%data(diag) + shift
+        write(6,*) this%data(1),this%data(this%nnz)
+    end subroutine shift_CS
+
+    ! Perform A = A + shift*B, where B's sparsity pattern is a subset of A's.
+    subroutine shift_B_CS(this,shift,B)
+        class(CS_matrix), intent(inout) :: this
+        double complex, intent(in) :: shift
+        class(CS_matrix), intent(in) :: B
+
+        integer :: i, ptr_a, ptr_b
+
+        if (.not.same_type_as(this,B)) then
+            write(6,*) "Error in shift_B_CS! B must have same type as this"
+            stop
+        end if
+
+        if (any(this%shape /= B%shape)) then
+            write(6,*) "Error in shift_B_CS! this and B must have same shape"
+            stop
+        end if
+
+        if (this%nnz < B%nnz) then
+            write(6,*) "Error in shift_B_CS! this%nnz must be >= B%nnz"
+            stop
+        end if
+
+        write(6,*) this%data(1),this%data(this%nnz),shift*B%data(B%nnz)
+        !!$omp parallel do private(ptr_a,ptr_b)
+        do i = 1,this%ptr_size()-1
+            ptr_b = B%index_ptr(i)
+            do ptr_a = this%index_ptr(i),this%index_ptr(i+1)-1
+                if (this%indices(ptr_a) == B%indices(ptr_b)) then
+                    this%data(ptr_a) = this%data(ptr_a) + shift*B%data(ptr_b)
+                    ptr_b = ptr_b + 1
+                end if
+            end do
+        end do
+        !!$omp end parallel
+        write(6,*) this%data(1),this%data(this%nnz)
+    end subroutine shift_B_CS
+
+    subroutine assign_CS(A,B)
+        class(CS_matrix), intent(out) :: A
+        class(CS_matrix), intent(in) :: B
+
+        if (.not.same_type_as(A,B)) then
+            write(6,*) "Error in CS_matrix assignment! A,B does not have the same type."
+            stop
+        end if
+
+        A%shape = B%shape
+        A%nnz = B%nnz
+
+        if (B%arrays_allocated()) then
+            A%index_ptr = B%index_ptr
+            A%indices = B%indices
+            A%data = B%data
+        end if
+    end subroutine assign_CS
+
+    function scalar_mult_CSR(alpha,X) result(res)
+        double complex, intent(in) :: alpha
+        class(CSR_matrix), intent(in) :: X
+        class(CS_matrix), allocatable :: res
+
+        allocate(CSR_matrix :: res)
+
+        res%shape = X%shape
+        res%nnz = X%nnz
+
+        if (X%arrays_allocated()) then
+            res%index_ptr = X%index_ptr
+            res%indices = X%indices
+            res%data = alpha*X%data
+        end if
+    end function scalar_mult_CSR
+
+    function scalar_mult_CSC(alpha,X) result(res)
+        double complex, intent(in) :: alpha
+        class(CSC_matrix), intent(in) :: X
+        class(CS_matrix), allocatable :: res
+
+        allocate(CSC_matrix :: res)
+
+        res%shape = X%shape
+        res%nnz = X%nnz
+
+        if (X%arrays_allocated()) then
+            res%index_ptr = X%index_ptr
+            res%indices = X%indices
+            res%data = alpha*X%data
+        end if
+    end function scalar_mult_CSC
 
     subroutine CSR_mv(A,x,y)
         class(CS_matrix), intent(in) :: A
