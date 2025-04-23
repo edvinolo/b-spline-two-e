@@ -702,7 +702,7 @@ contains
         confs_ex(1) = confs(1)
         confs_ex(2)%n = confs(2)%n([2,1])
         confs_ex(2)%l = confs(2)%l([2,1])
-        red_mat_ex = dip_red_mat(syms(1)%l,syms(2)%l,confs_ex,S,radial_dip)
+        red_mat_ex = (-1)**(syms(2)%l+sum(confs(2)%l))*dip_red_mat(syms(1)%l,syms(2)%l,confs_ex,S,radial_dip)
 
         res = red_mat + red_mat_ex
     end function dip_mat_neq
