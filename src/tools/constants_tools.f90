@@ -33,4 +33,12 @@ contains
         res = sqrt(I/I_au)
     end function E_0_au
 
+    pure function A_0_au(I,omega) result(res)
+        real(dp), intent(in) :: I
+        real(dp), intent(in) :: omega
+        real(dp) :: res
+
+        res = sqrt(I/I_au)/omega
+    end function A_0_au
+
 end module constants_tools
