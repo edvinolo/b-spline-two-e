@@ -28,10 +28,8 @@ program main_basis_setup
 
     double complex, dimension(:,:), allocatable :: eigs_v
     type(block), dimension(:), allocatable :: vecs_v
-    type(block) :: H_block,S_block
     type(basis) :: bas
     type(block), dimension(:), allocatable :: H_vec
-    type(CSR_matrix) H_spr,S_spr
     type(block_diag_CS) :: H_diag,S_diag
     type(block_CS), dimension(-1:1) :: dipoles
     type(sym), dimension(2) :: syms
@@ -40,13 +38,13 @@ program main_basis_setup
     type(CAP) :: CAP_c
 
     integer :: i,j,q
+    logical :: compute
 
     double precision :: t_start,t_end,t_prog_start,t_prog_end
 
     t_prog_start = omp_get_wtime()
 
     call set_basis_defaults()
-
     input_file = get_input_file()
     call get_basis_input(input_file)
 
@@ -86,11 +84,11 @@ program main_basis_setup
 
     call bas%init(max_L,max_l_1p,splines%n_b,z_pol,eigs_v)
 
-    call H_diag%init(bas%n_sym,H_spr)
-    call S_diag%init(bas%n_sym,S_spr)
+    call H_diag%init(bas%n_sym)
+    call S_diag%init(bas%n_sym)
     !$omp parallel do
     do i = 1,bas%n_sym
-        call construct_block_tensor(H_block,H_vec,S_block,S,splines,bas%syms(i),max_k,Rk,R_p,H_diag%blocks(i),S_diag%blocks(i))
+        call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,Rk,R_p,H_diag%blocks(i),S_diag%blocks(i),full)
         write(6,'(a,i0,a,es0.4)') "Sparsity H(", i,"): ", real(H_diag%blocks(i)%nnz)/(H_diag%blocks(i)%shape(1)**2)
         write(6,'(a,i0,a,es0.4)') "Sparsity S(", i,"): ", real(S_diag%blocks(i)%nnz)/(S_diag%blocks(i)%shape(1)**2)
     end do
@@ -107,13 +105,18 @@ program main_basis_setup
     call setup_radial_dip(splines,k_GL,radial_dip,gauge)
     t_start = omp_get_wtime()
     do q = -1,1
-        call dipoles(q)%init([bas%n_sym,bas%n_sym],H_spr)
-        !$omp parallel do private(i,syms) schedule(dynamic)
+        call dipoles(q)%init([bas%n_sym,bas%n_sym])
+        !$omp parallel do private(i,syms,compute) schedule(dynamic)
         do j = 1,bas%n_sym
             syms(2) = bas%syms(j)
             do i = 1,bas%n_sym
+                if ((.not.full).and.(i>j)) then
+                    compute = .false.
+                else
+                    compute = .true.
+                end if
                 syms(1) = bas%syms(i)
-                call construct_dip_block_tensor(syms,q,splines,S,radial_dip,dipoles(q)%blocks(i,j))
+                call construct_dip_block_tensor(syms,q,splines,S,radial_dip,dipoles(q)%blocks(i,j),compute)
             end do
         end do
         !$omp end parallel do

@@ -5,31 +5,25 @@ module dipole
     implicit none
 
 contains
-    subroutine construct_dip_block_tensor(syms,q,b_splines,S,radial_dip,dip_block)
+    subroutine construct_dip_block_tensor(syms,q,b_splines,S,radial_dip,dip_block,compute)
         type(sym), dimension(2), intent(in) :: syms
         integer, intent(in) :: q
         type(b_spline), intent(in) :: b_splines
         double complex, dimension(:,:), intent(in) ::  S
         double complex, dimension(:,:), intent(in) :: radial_dip
-        class(CS_matrix), intent(out) :: dip_block
+        type(CSR_matrix), intent(out) :: dip_block
+        logical, intent(in) :: compute
 
         double precision :: ang
         logical :: parity_allowed
         integer :: i,j,ptr,nnz
         type(config), dimension(2) :: confs,confs_ex
 
-        select type(dip_block)
-        type is (CSR_matrix)
-        class default
-            write(6,*) "Error! Dipole block must be CSR_matrix"
-            stop
-        end select
-
         ! Check if transitions are allowed between symmetry blocks
         parity_allowed = syms(1)%pi.neqv.syms(2)%pi
         ! Compute the Wigner-Eckart angular factor
         ang = (-1)**(syms(1)%l-syms(1)%m)*three_j(syms(1)%l,1,syms(2)%l,-syms(1)%m,q,syms(2)%m)
-        if ((abs(ang)<5.d-16).or.(.not.parity_allowed)) then
+        if ((abs(ang)<5.d-16).or.(.not.parity_allowed).or.(.not.compute)) then
             nnz = 0
             call dip_block%init([syms(1)%n_config,syms(2)%n_config],nnz)
             return
