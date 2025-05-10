@@ -45,6 +45,7 @@ program mat_els_test
     type(block_diag_CS) :: H_diag,S_diag
     type(block_CS) :: dip,block_sum
     character :: gauge
+    logical :: compute
 
     !for ploting orbitals
     double complex, dimension(:), allocatable :: vals
@@ -86,7 +87,7 @@ program mat_els_test
     call setup_H_one_particle(pot,CAP_c,l,splines,k_GL,H)
     call setup_S(splines,k_GL,S)
 
-    gauge = 'l'
+    gauge = 'v'
     call setup_radial_dip(splines,k_GL,r_mat,gauge)
 
     max_k = 4
@@ -296,11 +297,11 @@ program mat_els_test
     write(6,*) res
     !stop
 
-    call bas%init(2,2,splines%n_b,.true.,eigs_v)
+    call bas%init(2,2,splines%n_b,.false.,eigs_v)
     ! call H_block%init(bas%syms(2)%n_config,bas%syms(2)%n_config,.true.)
     ! call S_block%init(bas%syms(2)%n_config,bas%syms(2)%n_config,.true.)
     write(6,*) bas%syms(1)%l,bas%syms(1)%m,bas%syms(1)%pi,bas%syms(1)%n_config
-    nnz = count_nnz(splines,bas%syms(2),max_k)
+    nnz = count_nnz(splines,bas%syms(2),max_k,.true.)
     write(6,*) "nnz: ",nnz
     !call construct_block(H_block,bas%syms(1),eigs_v,vecs_v,max_k,Rk)
     ! call construct_block_tensor(H_block,H_vec,S_block,S,splines,bas%syms(2),max_k,Rk,R_p,H_spr,S_spr)
@@ -311,7 +312,7 @@ program mat_els_test
     call S_diag%init(bas%n_sym,S_spr)
     !$omp parallel do
     do i = 1,bas%n_sym
-        call construct_block_tensor(H_block,H_vec,S_block,S,splines,bas%syms(i),max_k,Rk,R_p,H_diag%blocks(i),S_diag%blocks(i))
+        call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,Rk,R_p,H_diag%blocks(i),S_diag%blocks(i),.false.)
     end do
     !$omp end parallel do
     call H_diag%compute_shape()
@@ -336,12 +337,12 @@ program mat_els_test
     ! close(1)
 
     res = dcmplx(2.9d0,0.d0)
-    call APX(H_diag,[res,res,res],S_diag)
-    call FEAST(H_block%data,S_block%data,H_diag%blocks(1),S_diag%blocks(1),dcmplx(0.d0,0.0d0),.6d0,eigs,vecs,i)
+    ! call APX(H_diag,[res,res,res],S_diag)
+    call FEAST(H_diag%blocks(1),S_diag%blocks(1),.true.,.false.,dcmplx(-2.5d0,0.0d0),.6d0,eigs,vecs,i)
     index_gs = minloc(real(eigs))
     i = index_gs(1)
     vec_gs = vecs(:,i)
-    call FEAST(H_block%data,S_block%data,H_diag%blocks(2),S_diag%blocks(2),dcmplx(0.0d0,0.0d0),.6d0,eigs,vecs,i)
+    call FEAST(H_diag%blocks(3),S_diag%blocks(3),.true.,.false.,dcmplx(-2.5d0,0.0d0),.6d0,eigs,vecs,i)
     index_gs = minloc(real(eigs))
     i = index_gs(1)
     vec_excited = vecs(:,i)
@@ -365,21 +366,21 @@ program mat_els_test
     call S_diag%to_CS(S_spr,.false.)
     ! call FEAST(H_block%data,S_block%data,H_spr,S_spr,dcmplx(-2.5d0,0.0d0),0.6d0,eigs,vecs,i)
 
-    deallocate(H)
-    call H_spr%get_dense(H)
-    open(unit=1,file='H_test.dat')
-    !H_block%data=abs(H_block%data-transpose(H_block%data))
-    do i = 1,H_spr%shape(1)
-        write(1,*) abs(H(i,:))
-    end do
-    close(1)
-    deallocate(H)
-    call S_spr%get_dense(H)
-    open(unit=1,file='S_test.dat')
-    do i = 1,S_spr%shape(1)
-        write(1,*) abs(H(i,:))
-    end do
-    close(1)
+    ! deallocate(H)
+    ! call H_spr%get_dense(H)
+    ! open(unit=1,file='H_test.dat')
+    ! !H_block%data=abs(H_block%data-transpose(H_block%data))
+    ! do i = 1,H_spr%shape(1)
+    !     write(1,*) abs(H(i,:))
+    ! end do
+    ! close(1)
+    ! deallocate(H)
+    ! call S_spr%get_dense(H)
+    ! open(unit=1,file='S_test.dat')
+    ! do i = 1,S_spr%shape(1)
+    !     write(1,*) abs(H(i,:))
+    ! end do
+    ! close(1)
 
     !write(6,*) H_block%data(702,666),H_block%data(666,702)
     ! do i = 1,bas%syms(1)%n_config
@@ -394,33 +395,33 @@ program mat_els_test
     ! write(6,*) 'Time for diag and sort (s): ', t_end-t_start
     ! write(6,*) eigs(1),eigs(2)
 
-    deallocate(eigs,vecs,H,S)
-    allocate(eigs(bas%syms(1)%n_config),vecs(bas%syms(1)%n_config,bas%syms(1)%n_config))
-    call H_diag%blocks(1)%get_dense(H)
-    call S_diag%blocks(1)%get_dense(S)
+    ! deallocate(eigs,vecs,H,S)
+    ! allocate(eigs(bas%syms(1)%n_config),vecs(bas%syms(1)%n_config,bas%syms(1)%n_config))
+    ! call H_diag%blocks(1)%get_dense(H)
+    ! call S_diag%blocks(1)%get_dense(S)
 
-    t_start = omp_get_wtime()
-    call eig_general(H,S,eigs,vecs)
-    call sort_eig(bas%syms(1)%n_config,eigs,vecs)
-    t_end = omp_get_wtime()
-    write(6,*) 'Time for diag and sort (s): ', t_end-t_start
-    write(6,*) eigs(1),eigs(2)
-    open(unit=1,file='eigs.dat')
-    do i = 1,bas%syms(1)%n_config
-        write(1,*) real(eigs(i)), aimag(eigs(i))
-    end do
-    close(1)
+    ! t_start = omp_get_wtime()
+    ! call eig_general(H,S,eigs,vecs)
+    ! call sort_eig(bas%syms(1)%n_config,eigs,vecs)
+    ! t_end = omp_get_wtime()
+    ! write(6,*) 'Time for diag and sort (s): ', t_end-t_start
+    ! write(6,*) eigs(1),eigs(2)
+    ! open(unit=1,file='eigs.dat')
+    ! do i = 1,bas%syms(1)%n_config
+    !     write(1,*) real(eigs(i)), aimag(eigs(i))
+    ! end do
+    ! close(1)
     ! deallocate(eigs,vecs)
     ! allocate(eigs(splines%n_b),vecs(splines%n_b,splines%n_b))
     ! call eig_general(H_vec(0)%data,S,eigs,vecs)
     ! call sort_eig(splines%n_b,eigs,vecs)
     ! write(6,*) eigs(1),eigs(2)
 
-    allocate(dip_block(bas%syms(1)%n_config,bas%syms(2)%n_config))
+    allocate(dip_block(bas%syms(1)%n_config,bas%syms(3)%n_config))
     syms(1) = bas%syms(1)
-    syms(2) = bas%syms(2)
-    call construct_dip_block_tensor(syms,0,splines,S,r_mat,dip_block_spr)
-    call construct_dip_block_dense(syms,0,S,r_mat,dip_block)
+    syms(2) = bas%syms(3)
+    call construct_dip_block_tensor(syms,1,splines,S,r_mat,dip_block_spr,.true.)
+    call construct_dip_block_dense(syms,1,S,r_mat,dip_block)
 
     allocate(vec_dip(size(vec_gs)))
     call zgemv('N',size(vec_gs),size(vec_excited),dcmplx(1.d0,0.d0),dip_block,size(vec_gs),vec_excited,1,&
@@ -439,29 +440,39 @@ program mat_els_test
     write(6,*) 'Constructing dipoles ...'
     t_1_dip = omp_get_wtime()
     call dip%init([bas%n_sym,bas%n_sym],dip_block_spr)
-    !$omp parallel do private(i,syms) schedule(dynamic)
+    !$omp parallel do private(i,syms,compute) schedule(dynamic)
     do j = 1,bas%n_sym
         syms(2) = bas%syms(j)
         do i = 1,bas%n_sym
             syms(1) = bas%syms(i)
-            call construct_dip_block_tensor(syms,1,splines,S,r_mat,dip%blocks(i,j))
+            if (i>j) then
+                compute = .false.
+            else
+                compute = .true.
+            end if
+            call construct_dip_block_tensor(syms,1,splines,S,r_mat,dip%blocks(i,j),compute)
         end do
     end do
     !$omp end parallel do
     call block_sum%init([bas%n_sym,bas%n_sym],dip_block_spr)
-    !$omp parallel do private(i,syms) schedule(dynamic)
+    !$omp parallel do private(i,syms,compute) schedule(dynamic)
     do j = 1,bas%n_sym
         syms(2) = bas%syms(j)
         do i = 1,bas%n_sym
             syms(1) = bas%syms(i)
-            call construct_dip_block_tensor(syms,-1,splines,S,r_mat,block_sum%blocks(i,j))
+            if (i>j) then
+                compute = .false.
+            else
+                compute = .true.
+            end if
+            call construct_dip_block_tensor(syms,-1,splines,S,r_mat,block_sum%blocks(i,j),compute)
         end do
     end do
     !$omp end parallel do
     t_2_dip = omp_get_wtime()
     write(6,*) 'Done! Time for dipole construction (s): ', t_2_dip-t_1_dip
 
-    dip = AXPBY(dip, (2.d0,0.d0), block_sum, (-2.d0,0.d0))
+    dip = AXPBY(dip, (2.d0,0.d0), block_sum, (2.d0,0.d0))
 
     block_sum = XPAY(H_diag,dip,(1.d0,0.d0))
 
@@ -472,6 +483,12 @@ program mat_els_test
     deallocate(dip_block)
     call block_sum%to_CS(dip_block_spr,.true.)
     call dip_block_spr%get_dense(dip_block)
+
+    call FEAST(dip_block_spr,S_spr,.true.,.false.,dcmplx(-2.5d0,0.0d0),.6d0,eigs,vecs,i)
+
+    ! res = maxval(abs(dip_block))
+    ! dip_block=dip_block-transpose(dip_block)
+    ! write(6,*) maxval(abs(dip_block)),maxval(abs(dip_block))/res
     ! Uncomment to write dipole block to file, useful for checking the sparsity pattern
     open(file='dip_test.dat',unit=1,action='write')
     do i = 1,ubound(dip_block,dim=1)
