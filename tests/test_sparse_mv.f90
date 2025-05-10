@@ -100,8 +100,8 @@ program test_sparse_mv
 
     t_1 = omp_get_wtime()
     do i=1,100
-        call CSR_mv(A,x,y_a)
-        !call mkl_zcsrgemv('N',A%shape(1),A%data,A%index_ptr,A%indices,x,y_a)
+        ! call CSR_mv(A,x,y_a)
+        call mkl_zcsrgemv('N',A%shape(1),A%data,A%index_ptr,A%indices,x,y_a)
         ! call mkl_zcsrsymv('U',A%shape(1),B%data,B%index_ptr,B%indices,x,y_a)
     end do
     t_2 = omp_get_wtime()
@@ -109,6 +109,7 @@ program test_sparse_mv
 
     t_1 = omp_get_wtime()
     do i = 1,100
+        !call CSR_T_mv(A,x,y_b)
         call CSR_mv_sym(B,x,y_b)
         ! call mkl_zcsrsymv('U',A%shape(1),B%data,B%index_ptr,B%indices,x,y_b)
     end do

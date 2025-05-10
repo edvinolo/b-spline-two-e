@@ -1,4 +1,5 @@
 module sparse_array_tools
+    use kind_tools
     use bspline_tools
     use stdlib_sorting, only: sort_index
     implicit none
@@ -49,12 +50,14 @@ module sparse_array_tools
         procedure :: init => init_CS
         procedure :: enter => enter_CS
         procedure :: convert => convert_CS
+        procedure :: transp => transpose_CS
         procedure :: arrays_allocated
         procedure :: deall => deall_CS
         procedure :: store_CS
         procedure :: load_CS
         procedure :: shift => shift_CS
         procedure :: shift_B => shift_B_CS
+        procedure :: scale => scale_CS
         procedure, pass(B) :: assign_CS
         generic :: assignment(=) => assign_CS
         generic :: operator(*) => scalar_mult
@@ -120,6 +123,17 @@ module sparse_array_tools
         procedure :: ptr_size => CSC_ptr_size
         procedure :: get_dense => CSC_get_dense
     end type CSC_matrix
+
+    ! Abstract interface for matvecs
+    abstract interface
+        subroutine mv(A,x,y)
+            import :: dp
+            import :: CSR_matrix
+            type(CSR_matrix), intent(in) :: a
+            complex(dp), intent(in) :: x(:)
+            complex(dp), intent(out) :: y(:)
+        end subroutine mv
+    end interface
 contains
 
     pure subroutine init_4d(this,max_k,b_splines)
@@ -430,14 +444,21 @@ contains
     !> Subroutine for converting between the two CS types
     !!
     !! @param A: the new representation
-    subroutine convert_CS(this,A)
+    subroutine convert_CS(this,A,transp)
         class(CS_matrix), intent(in) :: this
         class(CS_matrix), intent(out) :: A
+        logical, optional, intent(in) :: transp
 
         integer :: i,j,k,ptr
 
         !The way things are setup A is canonical (sorted) by default
-        call A%init(this%shape,this%nnz)
+        if (present(transp).and.transp) then
+            call A%init(this%shape([2,1]),this%nnz)
+        else
+            call A%init(this%shape,this%nnz)
+        end if
+
+        if (this%nnz == 0) return !Don't do anything if nnz = 0
 
         !Count nnz for each index along the new dimension
         !put it in the next element up
@@ -472,7 +493,19 @@ contains
         A%index_ptr(1) = 1
     end subroutine convert_CS
 
-    function arrays_allocated(this) result(retval)
+    subroutine transpose_CS(this,A)
+        class(CS_matrix), intent(in) :: this
+        class(CS_matrix), intent(out) :: A
+
+        if (.not.same_type_as(this,A)) then
+            write(6,*) "Error in transpose_CS! this and A should have same dynamic type!"
+        end if
+
+        call this%convert(A,transp=.true.)
+
+    end subroutine transpose_CS
+
+    pure function arrays_allocated(this) result(retval)
         class(CS_matrix), intent(in) :: this
         logical :: retval
 
@@ -489,6 +522,7 @@ contains
         if (allocated(this%index_ptr)) deallocate(this%index_ptr)
         if (allocated(this%indices)) deallocate(this%indices)
         if (allocated(this%data)) deallocate(this%data)
+        this%nnz = 0
     end subroutine deall_CS
 
     subroutine store_CS(this,loc,type)
@@ -656,9 +690,7 @@ contains
             stop
         end if
 
-        write(6,*) this%data(1),this%data(this%nnz)
         this%data(diag) = this%data(diag) + shift
-        write(6,*) this%data(1),this%data(this%nnz)
     end subroutine shift_CS
 
     ! Perform A = A + shift*B, where B's sparsity pattern is a subset of A's.
@@ -684,7 +716,6 @@ contains
             stop
         end if
 
-        write(6,*) this%data(1),this%data(this%nnz),shift*B%data(B%nnz)
         !!$omp parallel do private(ptr_a,ptr_b)
         do i = 1,this%ptr_size()-1
             ptr_b = B%index_ptr(i)
@@ -696,25 +727,38 @@ contains
             end do
         end do
         !!$omp end parallel
-        write(6,*) this%data(1),this%data(this%nnz)
     end subroutine shift_B_CS
 
-    subroutine assign_CS(A,B)
-        class(CS_matrix), intent(out) :: A
+    subroutine scale_CS(this, alpha)
+        class(CS_matrix), intent(inout) :: this
+        double complex, intent(in) ::  alpha
+
+        integer :: i
+
+        if (this%nnz>0) then
+            !$omp parallel do
+            do i = 1,this%nnz
+                this%data(i) = alpha*this%data(i)
+            end do
+            !$omp end parallel do
+        end if
+    end subroutine scale_CS
+
+    elemental subroutine assign_CS(A,B)
+        class(CS_matrix), intent(inout) :: A
         class(CS_matrix), intent(in) :: B
 
-        if (.not.same_type_as(A,B)) then
-            write(6,*) "Error in CS_matrix assignment! A,B does not have the same type."
-            stop
-        end if
+        if (same_type_as(A,B)) then
+            A%shape = B%shape
+            A%nnz = B%nnz
 
-        A%shape = B%shape
-        A%nnz = B%nnz
-
-        if (B%arrays_allocated()) then
-            A%index_ptr = B%index_ptr
-            A%indices = B%indices
-            A%data = B%data
+            if (B%arrays_allocated()) then
+                A%index_ptr = B%index_ptr
+                A%indices = B%indices
+                A%data = B%data
+            end if
+        ! else
+            ! error stop
         end if
     end subroutine assign_CS
 
@@ -753,18 +797,11 @@ contains
     end function scalar_mult_CSC
 
     subroutine CSR_mv(A,x,y)
-        class(CS_matrix), intent(in) :: A
-        double complex, dimension(:), intent(in) :: x
-        double complex, dimension(:), intent(inout) :: y
+        type(CSR_matrix), intent(in) :: A
+        complex(dp), intent(in) :: x(:)
+        complex(dp), intent(out) :: y(:)
 
         integer :: i,j
-
-        select type(A)
-        type is (CSR_matrix)
-        class default
-            write(6,*) "Error in CSR_mv! A must be CSR_matrix"
-            stop
-        end select
 
         if ((A%shape(2)/=size(x)).or.(A%shape(1)/=size(y))) then
             write(6,*) "Error! Incompatible array sizes in CSR_mv!"
@@ -774,16 +811,166 @@ contains
             stop
         end if
 
-        y = 0.d0
-
-        if (A%nnz == 0) return
+        if (A%nnz == 0) then
+            y = 0_dp
+            return
+        end if
 
         !$omp parallel do private(j)
         do i = 1,A%shape(1)
+            y(i) = 0_dp
             do j = A%index_ptr(i),A%index_ptr(i+1)-1
                 y(i) = y(i) + A%data(j)*x(A%indices(j))
             end do
         end do
         !$omp end parallel do
     end subroutine CSR_mv
+
+    subroutine CSR_T_mv(A,x,y)
+        type(CSR_matrix), intent(in) :: A
+        complex(dp), intent(in) :: x(:)
+        complex(dp), intent(out) :: y(:)
+
+        integer :: i,j
+
+        if ((A%shape(1)/=size(x)).or.(A%shape(2)/=size(y))) then
+            write(6,*) "Error! Incompatible array sizes in CSR_T_mv!"
+            write(6,*) "A shape: ", A%shape
+            write(6,*) "x shape: ", size(x)
+            write(6,*) "y shape: ", size(y)
+            stop
+        end if
+
+        if (A%nnz == 0) then
+            y = 0_dp
+            return
+        end if
+
+        !$omp parallel private(j)
+        !$omp do
+        do i = 1,A%shape(1)
+            y(i) = 0_dp
+        end do
+        !$omp end do
+
+        !$omp do reduction(+:y)
+        do i = 1,A%shape(1)
+            do j = A%index_ptr(i),A%index_ptr(i+1)-1
+                y(A%indices(j)) = y(A%indices(j)) + A%data(j)*x(i)
+            end do
+        end do
+        !$omp end do
+        !$omp end parallel
+    end subroutine CSR_T_mv
+
+    subroutine CSR_mv_sym(A,x,y)
+        type(CSR_matrix), intent(in) :: A
+        complex(dp), intent(in) :: x(:)
+        complex(dp), intent(out) :: y(:)
+
+        integer :: i,j
+
+        if ((A%shape(2)/=size(x)).or.(A%shape(1)/=size(y))) then
+            write(6,*) "Error! Incompatible array sizes in CSR_mv!"
+            write(6,*) "A shape: ", A%shape
+            write(6,*) "x shape: ", size(x)
+            write(6,*) "y shape: ", size(y)
+            stop
+        end if
+
+        if (A%nnz == 0) then
+            y = 0_dp
+            return
+        end if
+
+        !$omp parallel private(j)
+        !$omp do
+        do i = 1,A%shape(1)
+            y(i) = 0_dp
+            do j = A%index_ptr(i),A%index_ptr(i+1)-1
+                y(i) = y(i) + A%data(j)*x(A%indices(j))
+            end do
+        end do
+        !$omp end do
+
+        !$omp do reduction(+:y)
+        do i = 1,A%shape(1)
+            do j = A%index_ptr(i)+1,A%index_ptr(i+1)-1
+                y(A%indices(j)) = y(A%indices(j)) + A%data(j)*x(i)
+            end do
+        end do
+        !$omp end do
+        !$omp end parallel
+    end subroutine CSR_mv_sym
+
+    subroutine CSR_dsymv(n,a,ia,ja,alpha,x,beta,y)
+        integer, intent(in) :: n
+        real(dp), intent(in) :: a(:)
+        integer, intent(in) :: ia(:)
+        integer, intent(in) :: ja(:)
+        real(dp), intent(in) :: alpha
+        real(dp), intent(in) :: x(:)
+        real(dp), intent(in) :: beta
+        real(dp), intent(inout) :: y(:)
+
+        integer :: i,j
+
+        ! if ((A%shape(2)/=size(x)).or.(A%shape(1)/=size(y))) then
+        !     write(6,*) "Error! Incompatible array sizes in CSR_mv!"
+        !     write(6,*) "A shape: ", A%shape
+        !     write(6,*) "x shape: ", size(x)
+        !     write(6,*) "y shape: ", size(y)
+        !     stop
+        ! end if
+
+        ! y=beta*y
+        !$omp parallel private(j)
+        !$omp do
+        do i = 1,n
+            y(i) = beta*y(i)
+            do j = ia(i),ia(i+1)-1
+                y(i) = y(i) + alpha*a(j)*x(ja(j))
+            end do
+        end do
+        !$omp end do
+
+        !$omp do reduction(+:y)
+        do i = 1,n
+            do j = ia(i)+1,ia(i+1)-1
+                y(ja(j)) = y(ja(j)) + alpha*a(j)*x(i)
+            end do
+        end do
+        !$omp end do
+        !$omp end parallel
+
+    end subroutine CSR_dsymv
+
+    subroutine check_diag_dom(A)
+        class(CS_matrix), intent(in) :: A
+
+        integer :: i,j
+        real(dp) :: sum, diag
+        logical, allocatable :: not_diag_dom(:)
+
+        allocate(not_diag_dom(A%shape(1)))
+        !$omp parallel do private(j,diag,sum)
+        do i = 1,A%shape(1)
+            do j = A%index_ptr(i),A%index_ptr(i+1)-1
+                if (A%indices(j) == i) then
+                    diag = abs(A%data(j))
+                else
+                    sum = sum + abs(A%data(j))
+                end if
+            end do
+            if (sum > diag) then
+                write(6,*) i,diag,sum
+                not_diag_dom(i) = .true.
+            else
+                not_diag_dom(i) = .false.
+            end if
+        end do
+        !$omp end parallel do
+
+        if (any(not_diag_dom)) write(6,*) "A is not diagonally dominant!"
+    end subroutine check_diag_dom
 end module sparse_array_tools

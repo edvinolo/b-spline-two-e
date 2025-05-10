@@ -1,5 +1,5 @@
 module block_tools
-    use sparse_array_tools, only: CS_matrix,CSR_matrix,CSC_matrix
+    use sparse_array_tools, only: CSR_matrix
     implicit none
 
     type, public :: block
@@ -22,7 +22,7 @@ module block_tools
     type, public :: block_CS
         integer, dimension(2) :: block_shape
         integer, dimension(2) :: shape
-        class(CS_matrix), dimension(:,:), allocatable :: blocks
+        type(CSR_matrix), dimension(:,:), allocatable :: blocks
     contains
         procedure :: init => init_block_CS
         procedure :: deall => deallocate_block_CS
@@ -30,12 +30,13 @@ module block_tools
         procedure :: to_CS => CS_from_block
         procedure :: store => CS_block_store
         procedure :: load => CS_block_load
+        procedure :: scale => CS_block_scale
     end type block_CS
 
     type, public :: block_diag_CS
         integer, dimension(2) :: block_shape
         integer, dimension(2) :: shape
-        class(CS_matrix), dimension(:), allocatable :: blocks
+        type(CSR_matrix), dimension(:), allocatable :: blocks
     contains
         procedure :: init => init_block_diag_CS
         procedure :: deall => deallocate_block_diag_CS
@@ -43,18 +44,19 @@ module block_tools
         procedure :: to_CS => CS_from_block_diag
         procedure :: store => CS_block_diag_store
         procedure :: load => CS_block_diag_load
+        procedure :: scale => CS_block_diag_scale
     end type  block_diag_CS
 
     interface XPAY
-        module procedure CS_diag_X_P_A_block_Y
+        module procedure :: CS_diag_X_P_A_block_Y
     end interface
 
     interface AXPBY
-        module procedure CS_A_block_X_P_B_block_Y
+        module procedure :: CS_A_block_X_P_B_block_Y
     end interface
 
     interface APX
-        module procedure CS_A_P_diag_X, CS_A_P_block_X, CS_A_diag_B_P_diag_X, CS_A_diag_B_P_block_X, &
+        module procedure :: CS_A_P_diag_X, CS_A_P_block_X, CS_A_diag_B_P_diag_X, CS_A_diag_B_P_block_X, &
                          CS_A_block_B_P_block_X
     end interface
 contains
@@ -84,38 +86,22 @@ contains
         allocate(this%blocks(n,m))
     end subroutine init_block_mat
 
-    subroutine init_block_CS(this,shape_in,block_type)
+    subroutine init_block_CS(this,shape_in)
         class(block_CS), intent(inout) :: this
         integer, dimension(2), intent(in) :: shape_in
-        class(CS_matrix), intent(in) :: block_type
 
         this%block_shape = shape_in
-
-        select type(block_type)
-        type is (CSR_matrix)
-            allocate(CSR_matrix :: this%blocks(shape_in(1),shape_in(2)))
-        type is (CSC_matrix)
-            allocate(CSC_matrix :: this%blocks(shape_in(1),shape_in(2)))
-        class default
-            write(6,*) "block_type must be CSR_matrix or CSC_matrix"
-        end select
+        allocate(this%blocks(shape_in(1),shape_in(2)))
+        this%blocks%nnz = 0
     end subroutine init_block_CS
 
-    subroutine init_block_diag_CS(this,n,block_type)
+    subroutine init_block_diag_CS(this,n)
         class(block_diag_CS), intent(inout) :: this
         integer, intent(in) :: n
-        class(CS_matrix), intent(in) :: block_type
 
         this%block_shape = [n,n]
-
-        select type(block_type)
-        type is (CSR_matrix)
-            allocate(CSR_matrix :: this%blocks(n))
-        type is (CSC_matrix)
-            allocate(CSC_matrix :: this%blocks(n))
-        class default
-            write(6,*) "block_type must be CSR_matrix or CSC_matrix"
-        end select
+        allocate(this%blocks(n))
+        this%blocks%nnz = 0
     end subroutine init_block_diag_CS
 
     subroutine deallocate_block_CS(this)
@@ -137,7 +123,11 @@ contains
 
         this%shape = 0
         do i = 1, this%block_shape(1)
-            this%shape = this%shape + this%blocks(i,i)%shape
+            this%shape(1) = this%shape(1) + this%blocks(i,1)%shape(1)
+        end do
+
+        do i = 1, this%block_shape(2)
+            this%shape(2) = this%shape(2) + this%blocks(1,i)%shape(2)
         end do
     end subroutine compute_shape_block_CS
 
@@ -154,16 +144,10 @@ contains
 
     subroutine CS_from_block(blocks,CS,deall_block)
         class(block_CS), intent(inout) :: blocks
-        class(CS_matrix), intent(inout) :: CS
+        type(CSR_matrix), intent(inout) :: CS
         logical, intent(in) :: deall_block
 
         integer :: i, j, nnz
-
-        ! check that the individual blocks and CS are of the same type
-        if (.not.same_type_as(CS,blocks%blocks(1,1))) then
-            write(6,*) "CS and blocks must be of the same type"
-            stop
-        end if
 
         nnz = 0
         do j = 1,blocks%block_shape(2)
@@ -175,18 +159,13 @@ contains
         end do
 
         call blocks%compute_shape()
-        call CS%init(blocks%shape,nnz)
+        if ((CS%nnz /= nnz).or.(any(CS%shape /= blocks%shape))) then
+            if (CS%arrays_allocated()) call CS%deall()
+            call CS%init(blocks%shape,nnz)
+        end if
 
         if (nnz /= 0) then
-            select type(CS)
-            type is(CSR_matrix)
-                call CSR_from_block(blocks,CS)
-            type is(CSC_matrix)
-                call CSC_from_block(blocks,CS)
-            class default
-                write(6,*) "blocks must be CSR_matrix or CSC_matrix"
-                stop
-            end select
+            call CSR_from_block(blocks,CS)
         end if
 
         if (deall_block) then
@@ -231,61 +210,56 @@ contains
 
         if (CS%index_ptr(CS%shape(1)+1) /= CS%nnz+1) then
             write(6,*) "Error in CSR from block assembly, index_ptr(N_rows+1) /= nnz + 1"
+            write(6,*) CS%index_ptr(CS%shape(1)+1), CS%nnz+1
             stop
         end if
 
     end subroutine CSR_from_block
 
-    subroutine CSC_from_block(blocks,CS)
-        class(block_CS), intent(inout) :: blocks
-        type(CSC_matrix), intent(inout) :: CS
+    ! subroutine CSC_from_block(blocks,CS)
+    !     class(block_CS), intent(inout) :: blocks
+    !     type(CSC_matrix), intent(inout) :: CS
 
-        integer :: i, j, col_i
-        integer :: ptr, row, col, start, end, CS_start, CS_end
+    !     integer :: i, j, col_i
+    !     integer :: ptr, row, col, start, end, CS_start, CS_end
 
-        ptr = 1
-        col = 0
+    !     ptr = 1
+    !     col = 0
 
-        do i = 1,blocks%block_shape(2)
-            do col_i = 1, blocks%blocks(1,i)%shape(2)
-                col = col +1
-                row = 0
-                CS%index_ptr(col) = ptr
-                do j = 1,blocks%block_shape(1)
-                    if (blocks%blocks(j,i)%arrays_allocated()) then
-                        start = blocks%blocks(j,i)%index_ptr(col_i)
-                        end  = blocks%blocks(j,i)%index_ptr(col_i+1)-1
-                        CS_start = ptr
-                        CS_end = ptr + (end-start)
-                        CS%indices(CS_start:CS_end) = col + blocks%blocks(j,i)%indices(start:end)
-                        CS%data(CS_start:CS_end) = blocks%blocks(j,i)%data(start:end)
-                        ptr = CS_end + 1
-                    end if
-                    row = row + blocks%blocks(j,i)%shape(1)
-                end do
-            end do
-        end do
-        CS%index_ptr(col+1) = ptr
+    !     do i = 1,blocks%block_shape(2)
+    !         do col_i = 1, blocks%blocks(1,i)%shape(2)
+    !             col = col +1
+    !             row = 0
+    !             CS%index_ptr(col) = ptr
+    !             do j = 1,blocks%block_shape(1)
+    !                 if (blocks%blocks(j,i)%arrays_allocated()) then
+    !                     start = blocks%blocks(j,i)%index_ptr(col_i)
+    !                     end  = blocks%blocks(j,i)%index_ptr(col_i+1)-1
+    !                     CS_start = ptr
+    !                     CS_end = ptr + (end-start)
+    !                     CS%indices(CS_start:CS_end) = col + blocks%blocks(j,i)%indices(start:end)
+    !                     CS%data(CS_start:CS_end) = blocks%blocks(j,i)%data(start:end)
+    !                     ptr = CS_end + 1
+    !                 end if
+    !                 row = row + blocks%blocks(j,i)%shape(1)
+    !             end do
+    !         end do
+    !     end do
+    !     CS%index_ptr(col+1) = ptr
 
-        if (CS%index_ptr(CS%shape(1)+1) /= CS%nnz+1) then
-            write(6,*) "Error in CSC from block assembly, index_ptr(N_cols+1) /= nnz + 1"
-            stop
-        end if
-    end subroutine CSC_from_block
+    !     if (CS%index_ptr(CS%shape(2)+1) /= CS%nnz+1) then
+    !         write(6,*) "Error in CSC from block assembly, index_ptr(N_cols+1) /= nnz + 1"
+    !         write(6,*) CS%index_ptr(CS%shape(2)+1), CS%nnz+1
+    !         stop
+    !     end if
+    ! end subroutine CSC_from_block
 
     subroutine CS_from_block_diag(blocks,CS,deall_block)
         class(block_diag_CS), intent(inout) :: blocks
-        class(CS_matrix), intent(inout) :: CS
+        type(CSR_matrix), intent(inout) :: CS
         logical, intent(in) :: deall_block
 
-        integer :: i, j, nnz, row_i
-        integer :: ptr, row, col, start, end, CS_start, CS_end
-
-        ! check that the individual blocks and CS are of the same type
-        if (.not.same_type_as(CS,blocks%blocks(1))) then
-            write(6,*) "CS and blocks must be of the same type"
-            stop
-        end if
+        integer :: i, nnz
 
         nnz = 0
         do i = 1,blocks%block_shape(1)
@@ -295,18 +269,13 @@ contains
         end do
 
         call blocks%compute_shape()
-        call CS%init(blocks%shape,nnz)
+        if ((CS%nnz /= nnz).or.(any(CS%shape /= blocks%shape))) then
+            if (CS%arrays_allocated()) call CS%deall()
+            call CS%init(blocks%shape,nnz)
+        end if
 
         if (nnz /= 0) then
-            select type(CS)
-            type is(CSR_matrix)
-                call CSR_from_block_diag(blocks,CS)
-            type is (CSC_matrix)
-                call CSC_from_block_diag(blocks,CS)
-            class default
-                write(6,*) "blocks must be CSR_matrix or CSC_matrix"
-                stop
-            end select
+            call CSR_from_block_diag(blocks,CS)
         end if
 
 
@@ -353,41 +322,41 @@ contains
         end if
     end subroutine CSR_from_block_diag
 
-    subroutine CSC_from_block_diag(blocks,CS)
-        type(block_diag_CS), intent(inout) :: blocks
-        type(CSC_matrix), intent(inout) :: CS
+    ! subroutine CSC_from_block_diag(blocks,CS)
+    !     type(block_diag_CS), intent(inout) :: blocks
+    !     type(CSC_matrix), intent(inout) :: CS
 
-        integer :: i, col_i
-        integer :: ptr, row, col, start, end, CS_start, CS_end
+    !     integer :: i, col_i
+    !     integer :: ptr, row, col, start, end, CS_start, CS_end
 
-        ptr = 1
-        col = 0
+    !     ptr = 1
+    !     col = 0
 
-        row = 0
-        do i = 1,blocks%block_shape(1)
-            do col_i = 1, blocks%blocks(i)%shape(1)
-                col = col + 1
-                CS%index_ptr(col) = ptr
+    !     row = 0
+    !     do i = 1,blocks%block_shape(1)
+    !         do col_i = 1, blocks%blocks(i)%shape(1)
+    !             col = col + 1
+    !             CS%index_ptr(col) = ptr
 
-                if (blocks%blocks(i)%arrays_allocated()) then
-                    start = blocks%blocks(i)%index_ptr(col_i)
-                    end  = blocks%blocks(i)%index_ptr(col_i+1)-1
-                    CS_start = ptr
-                    CS_end = ptr + (end-start)
-                    CS%indices(CS_start:CS_end) = col + blocks%blocks(i)%indices(start:end)
-                    CS%data(CS_start:CS_end) = blocks%blocks(i)%data(start:end)
-                    ptr = CS_end + 1
-                end if
-            end do
-            row = row + blocks%blocks(i)%shape(2)
-        end do
-        CS%index_ptr(col+1) = ptr
+    !             if (blocks%blocks(i)%arrays_allocated()) then
+    !                 start = blocks%blocks(i)%index_ptr(col_i)
+    !                 end  = blocks%blocks(i)%index_ptr(col_i+1)-1
+    !                 CS_start = ptr
+    !                 CS_end = ptr + (end-start)
+    !                 CS%indices(CS_start:CS_end) = col + blocks%blocks(i)%indices(start:end)
+    !                 CS%data(CS_start:CS_end) = blocks%blocks(i)%data(start:end)
+    !                 ptr = CS_end + 1
+    !             end if
+    !         end do
+    !         row = row + blocks%blocks(i)%shape(2)
+    !     end do
+    !     CS%index_ptr(col+1) = ptr
 
-        if (CS%index_ptr(CS%shape(2)+1) /= CS%nnz+1) then
-            write(6,*) "Error in CSC from block assembly, index_ptr(N_cols+1) /= nnz + 1"
-            stop
-        end if
-    end subroutine CSC_from_block_diag
+    !     if (CS%index_ptr(CS%shape(2)+1) /= CS%nnz+1) then
+    !         write(6,*) "Error in CSC from block assembly, index_ptr(N_cols+1) /= nnz + 1"
+    !         stop
+    !     end if
+    ! end subroutine CSC_from_block_diag
 
     subroutine CS_block_store(this,loc)
         class(block_CS), intent(inout) :: this
@@ -399,19 +368,7 @@ contains
 
         open(unit=1,file=loc,action='write',form='unformatted')
 
-        associate (element => this%blocks(1,1))
-            select type (element)
-            type is (CSR_matrix)
-                write(1) 'CSR'
-            type is (CSC_matrix)
-                write(1) 'CSC'
-            class default
-                write(6,*) 'Blocks must be CSR_matrix or CSC_matrix'
-                close(1)
-                stop
-            end select
-        end associate
-
+        write(1) 'CSR'
         write(1) this%block_shape
         write(1) this%shape
 
@@ -440,16 +397,19 @@ contains
         integer :: nnz
         character(len=3) :: type
         integer, dimension(2) :: shape, block_shape
-        type(CSR_matrix) :: CSR
-        type(CSC_matrix) :: CSC
 
         open(unit=1,file=loc,action='read',form='unformatted')
         read(1) type
         read(1) block_shape
         read(1) shape
 
-        if (type == 'CSR') call this%init(block_shape,CSR)
-        if (type == 'CSC') call this%init(block_shape,CSC)
+        if (type == 'CSR') then
+            call this%init(block_shape)
+        else
+            write(6,*) "Error! Only CSR blocks are implemented."
+            write(6,*) type
+            stop
+        end if
         this%shape = shape
 
         do j = 1, this%block_shape(2)
@@ -480,19 +440,7 @@ contains
 
         open(unit=1,file=loc,action='write',form='unformatted')
 
-        associate (element => this%blocks(1))
-            select type (element)
-            type is (CSR_matrix)
-                write(1) 'CSR'
-            type is (CSC_matrix)
-                write(1) 'CSC'
-            class default
-                write(6,*) 'Blocks must be CSR_matrix or CSC_matrix'
-                close(1)
-                stop
-            end select
-        end associate
-
+        write(1) 'CSR'
         write(1) this%block_shape
         write(1) this%shape
 
@@ -519,16 +467,19 @@ contains
         integer :: nnz
         character(len=3) :: type
         integer, dimension(2) :: shape, block_shape
-        type(CSR_matrix) :: CSR
-        type(CSC_matrix) :: CSC
 
         open(unit=1,file=loc,action='read',form='unformatted')
         read(1) type
         read(1) block_shape
         read(1) shape
 
-        if (type == 'CSR') call this%init(block_shape(1),CSR)
-        if (type == 'CSC') call this%init(block_shape(1),CSC)
+        if (type == 'CSR') then
+            call this%init(block_shape(1))
+        else
+            write(6,*) "Error! Blocks must be CSR!"
+            write(6,*) type
+            stop
+        end if
         this%shape = shape
 
         do i = 1, this%block_shape(1)
@@ -547,6 +498,30 @@ contains
         close(1)
     end subroutine CS_block_diag_load
 
+    subroutine CS_block_scale(this, alpha)
+        class(block_CS), intent(inout) :: this
+        double complex, intent(in) ::  alpha
+
+        integer i,j
+
+        do j = 1,this%block_shape(2)
+            do i = 1,this%block_shape(1)
+                call this%blocks(i,j)%scale(alpha)
+            end do
+        end do
+    end subroutine CS_block_scale
+
+    subroutine CS_block_diag_scale(this, alpha)
+        class(block_diag_CS), intent(inout) :: this
+        double complex, intent(in) ::  alpha
+
+        integer i
+
+        do i = 1,this%block_shape(1)
+            call this%blocks(i)%scale(alpha)
+        end do
+    end subroutine CS_block_diag_scale
+
     ! Function that returns the result of adding a block diagonal sparse matrix X to a block sparse matrix Y.
     ! The second block matrix is assumed to have empty blocks on the diagonal.
     ! The second matrix is scaled by alpha
@@ -558,17 +533,12 @@ contains
 
         integer :: i,j
 
-        if (.not.same_type_as(X%blocks(1),Y%blocks(1,1))) then
-            write(6,*) "Error in CS_diag_X_P_A_block_Y! Dynamic types of blocks are not equal"
-            stop
-        end if
-
         if (any(X%block_shape /= Y%block_shape)) then
             write(6,*) "Error in CS_diag_X_P_A_block_Y! Incompatible block shapes"
             stop
         end if
 
-        call res%init(Y%block_shape,Y%blocks(1,1))
+        call res%init(Y%block_shape)
 
         !$omp parallel do private(i) schedule(dynamic)
         do j = 1,Y%block_shape(2)
@@ -593,17 +563,12 @@ contains
 
         integer :: i,j
 
-        if (.not.same_type_as(X%blocks(1,1),Y%blocks(1,1))) then
-            write(6,*) "Error in CS_A_block_X_P_B_block_Y! Dynamic types of blocks are not equal"
-            stop
-        end if
-
         if (any(X%block_shape /= Y%block_shape)) then
             write(6,*) "Error in CS_A_block_X_P_B_block_Y! Incompatible block shapes"
             stop
         end if
 
-        call res%init(Y%block_shape,Y%blocks(1,1))
+        call res%init(Y%block_shape)
 
         !$omp parallel do private(i) schedule(dynamic)
         do j = 1,Y%block_shape(2)
