@@ -1,11 +1,33 @@
 module eig_tools
-    use sparse_array_tools, only: CSR_matrix,CSC_matrix,CS_matrix,CSR_mv
+    use kind_tools
+    use sparse_array_tools, only: CSR_matrix,CSR_mv,CSR_mv_sym,mv
     use stdlib_linalg_lapack, only: ggev
-    use stdlib_linalg_blas, only: dotu,gemv
+    use stdlib_linalg_blas, only: gemv
     use stdlib_sorting, only: sort_index
-    use iso_fortran_env, only: stderr => error_unit
+    use iso_fortran_env, only: stdout => output_unit, stderr => error_unit
+    use PARDISO_tools, only: PARDISO_solver
+    use precond_tools, only: block_PC
+    use GMRES_tools, only: zFGMRES
     use omp_lib, only: omp_get_wtime
     implicit none
+
+    ! complex(dp), external :: zdotu
+    interface
+        complex(dp) function zdotu(N,zx,incx,zy,incy)
+            import :: dp
+            integer :: N
+            complex(dp) :: zx(*)
+            integer :: incx
+            complex(dp) :: zy(*)
+            integer :: incy
+        end function zdotu
+    end interface
+
+    real(dp), parameter :: default_ARPACK_tol = 1e-12_dp
+
+    interface drive_ARPACK_SI
+        module procedure :: drive_ARPACK_GMRES, drive_ARPACK_PARDISO, drive_ARPACK_precond
+    end interface
 
 contains
     ! Normalize vecs according to v.T*B*v = id
@@ -58,7 +80,7 @@ contains
         ! Normalize the eigenvectors
         do i=1,N
             call gemv('N',N,N,dcmplx(1.d0,0.d0),B,N,vecs(:,i),1,dcmplx(0.d0,0.d0),temp_v,1)
-            vecs(:,i) = vecs(:,i)/sqrt(dotu(N,vecs(:,i),1,temp_v,1))
+            vecs(:,i) = vecs(:,i)/sqrt(zdotu(N,vecs(:,i),1,temp_v,1))
         end do
 
     end subroutine eig_general
@@ -77,7 +99,7 @@ contains
         ! Normalize the eigenvectors
         do i=1,N
             call gemv('N',N,N,dcmplx(1.d0,0.d0),B,N,vecs(:,i),1,dcmplx(0.d0,0.d0),temp_v,1)
-            vecs(:,i) = vecs(:,i)/sqrt(dotu(N,vecs(:,i),1,temp_v,1))
+            vecs(:,i) = vecs(:,i)/sqrt(zdotu(N,vecs(:,i),1,temp_v,1))
         end do
 
     end subroutine B_normalize
@@ -114,11 +136,11 @@ contains
         vecs = vecs(:,index)
     end subroutine sort_eig
 
-    subroutine FEAST(H,S,A,B,mid,rad,eigs,vecs,M)
-        double complex, dimension(:,:), intent(in) :: H
-        double complex, dimension(:,:), intent(in) :: S
-        class(CS_matrix), intent(inout) :: A
-        class(CS_matrix), intent(inout) :: B
+    subroutine FEAST(A,B,sym,full,mid,rad,eigs,vecs,M)
+        type(CSR_matrix), intent(inout) :: A
+        type(CSR_matrix), intent(inout) :: B
+        logical, intent(in) :: sym
+        logical, intent(in) :: full
         double complex, intent(in) :: mid
         double precision, intent(in) :: rad
         double complex, dimension(:), allocatable, intent(inout) :: eigs
@@ -130,22 +152,15 @@ contains
         integer :: M_0,loop,info,i
         double precision, dimension(:), allocatable :: res
         integer, dimension(64) :: fpm
+        character :: uplo
 
         double complex, dimension(:), allocatable :: temp_V
 
-        select type(A)
-        type is (CSR_matrix)
-        class default
-            write(6,*) "A must be CSR_matrix"
-            stop
-        end select
-
-        select type(B)
-        type is (CSR_matrix)
-        class default
-            write(6,*) "B must be CSR_matrix"
-            stop
-        end select
+        if (full) then
+            uplo = 'F'
+        else
+            uplo = 'U'
+        end if
 
         call feastinit(fpm)
         fpm(1) = 1
@@ -162,12 +177,13 @@ contains
 
         write(6,*) "Finding eigenvalues using FEAST"
         t_1 = omp_get_wtime()
-        call zfeast_scsrgv('F',A%shape(1),A%data,A%index_ptr,A%indices,B%data,B%index_ptr,B%indices &
+        if (sym) then
+            call zfeast_scsrgv(uplo,A%shape(1),A%data,A%index_ptr,A%indices,B%data,B%index_ptr,B%indices &
                             ,fpm,epsout,loop,mid,rad,M_0,eigs,vecs,M,res,info)
-        !call zfeast_gcsrgv(A%shape(1),A%data,A%index_ptr,A%indices,B%data,B%index_ptr,B%indices &
-        !                    ,fpm,epsout,loop,mid,rad,M_0,eigs,vecs,M,res,info)
-        !call zfeast_sygv('F',A%shape(1),H,A%shape(1),S,A%shape(1) &
-        !                    ,fpm,epsout,loop,mid,rad,M_0,eigs,vecs,M,res,info)
+        else
+            call zfeast_gcsrgv(A%shape(1),A%data,A%index_ptr,A%indices,B%data,B%index_ptr,B%indices &
+                               ,fpm,epsout,loop,mid,rad,M_0,eigs,vecs,M,res,info)
+        end if
         t_2 = omp_get_wtime()
         write(6,*) "Time for FEAST (s): ", t_2-t_1
 
@@ -182,9 +198,449 @@ contains
             ! Should use a sparse gemv routine here!
             ! call gemv('N',B%s,N,dcmplx(1.d0,0.d0),B,N,vecs(:,i),1,dcmplx(0.d0,0.d0),temp_v,1)
             call CSR_mv(B,vecs(:,i),temp_V)
-            ! write(6,*) sqrt(dotu(B%shape(1),vecs(:,i),1,temp_v,1))
-            vecs(:,i) = vecs(:,i)/sqrt(dotu(B%shape(1),vecs(:,i),1,temp_v,1))
+            vecs(:,i) = vecs(:,i)/sqrt(zdotu(B%shape(1),vecs(:,i),1,temp_v,1))
         end do
 
     end subroutine FEAST
+
+    subroutine drive_ARPACK_PARDISO(A,solver,B,full,shift,n_eigs,eigs,vecs,v0,max_iter,tol)
+        type(CSR_matrix), intent(in) :: A
+        type(PARDISO_solver), intent(inout) :: solver
+        type(CSR_matrix), intent(in) :: B
+        logical, intent(in) :: full
+        complex(dp), intent(in) :: shift
+        integer, intent(in) :: n_eigs
+        complex(dp), intent(out) :: eigs(:)
+        complex(dp), intent(out) :: vecs(:,:)
+        complex(dp), optional, intent(in) :: v0(:)
+        integer, optional, intent(in) :: max_iter
+        real(dp), optional, intent(in) :: tol
+
+        ! Actual values of optional agruments
+        complex(dp) :: resid(B%shape(1))
+        integer :: max_i
+        real(dp) :: r_tol
+
+        ! Variables used by znaupd
+        integer :: info, ido, n, ncv, ldv, lworkl
+        character :: bmat
+        character(len=2) :: which
+        complex(dp), allocatable :: V(:,:)
+        integer :: iparam(11), ipntr(14)
+        complex(dp), allocatable :: workd(:)
+        complex(dp), allocatable :: workl(:)
+        real(dp), allocatable :: rwork(:)
+
+        integer :: x_1,x_2,y_1,y_2,i
+        complex(dp), allocatable :: temp(:)
+
+        ! Select correct routine for B matvecs
+        procedure(mv), pointer :: mv_B => null()
+        if (full) then
+            mv_B => CSR_mv
+        else
+            mv_B => CSR_mv_sym
+        end if
+
+        ! Set optional arguments
+        if (present(v0)) then
+            resid = v0
+            info = 1 ! User supplied starting vector
+        else
+            resid = 0
+            info = 0 ! Random starting vector
+        end if
+
+        if (present(max_iter)) then
+            max_i = max_iter
+        else
+            max_i = 300
+        end if
+
+        if (present(tol)) then
+            r_tol = tol
+        else
+            r_tol = default_ARPACK_tol
+        end if
+
+        ! Set variables used by RCI calls
+        ido = 0
+        bmat = 'G'
+        n = B%shape(1)
+        which = 'LM'
+        ncv = 2*n_eigs ! Recomended by ARPACK documentation
+        allocate(V(n,ncv))
+        ldv = n
+        iparam(1) = 1
+        iparam(3) = max_i
+        iparam(4) = 1
+        iparam(7) = 3
+        allocate(workd(3*n))
+        lworkl = 3*ncv**2 + 5*ncv
+        allocate(workl(lworkl))
+        allocate(rwork(ncv))
+
+        ! Allocate temp vector used during RCI
+        allocate(temp(n))
+
+        write(stdout,*) ""
+        write(stdout,*) "Finding eigenvalues with znaupd..."
+
+        do while (ido /= 99)
+            call znaupd(ido, bmat, n, which, n_eigs, r_tol, resid, ncv, V, ldv,&
+                        iparam, ipntr, workd, workl, lworkl, rwork, info)
+
+            if (ido == -1) then
+                ! Perform (A-shift*B)^-1*B*x = y
+                x_1 = ipntr(1)
+                x_2 = ipntr(1) + n - 1
+                y_1 = ipntr(2)
+                y_2 = ipntr(2) + n - 1
+                call mv_B(B,workd(x_1:x_2),temp)
+                call solver%solve(A%data,A%index_ptr,A%indices,workd(y_1:y_2),temp)
+
+            else if (ido == 1) then
+                ! Perform (A-shift*B)^-1*B*x = y, with B*x stored in workd(ipntr(3))
+                x_1 = ipntr(3)
+                x_2 = ipntr(3) + n - 1
+                y_1 = ipntr(2)
+                y_2 = ipntr(2) + n - 1
+                call solver%solve(A%data,A%index_ptr,A%indices,workd(y_1:y_2),workd(x_1:x_2))
+
+            else if (ido == 2) then
+                ! Perform B*x = y
+                x_1 = ipntr(1)
+                x_2 = ipntr(1) + n - 1
+                y_1 = ipntr(2)
+                y_2 = ipntr(2) + n - 1
+                call mv_B(B,workd(x_1:x_2),workd(y_1:y_2))
+
+            else if (ido == 3) then
+                write(stderr,*) "ido = 3 returned by znaupd, but user supplied shifts not implemented."
+                stop
+            end if
+        end do
+
+        call postprocess_ARPACK(eigs,vecs,B,mv_B,temp,V,ldv,shift,bmat,n,which,n_eigs,r_tol,resid,ncv,iparam,ipntr,&
+                                workd,workl,lworkl,rwork,info)
+    end subroutine drive_ARPACK_PARDISO
+
+    subroutine drive_ARPACK_precond(A,precond,B,full,shift,n_eigs,eigs,vecs,v0,max_iter,tol)
+        type(CSR_matrix), intent(in) :: A
+        type(block_PC), intent(inout) :: precond
+        type(CSR_matrix), intent(in) :: B
+        logical, intent(in) :: full
+        complex(dp), intent(in) :: shift
+        integer, intent(in) :: n_eigs
+        complex(dp), intent(out) :: eigs(:)
+        complex(dp), intent(out) :: vecs(:,:)
+        complex(dp), optional, intent(in) :: v0(:)
+        integer, optional, intent(in) :: max_iter
+        real(dp), optional, intent(in) :: tol
+
+        ! Actual values of optional agruments
+        complex(dp) :: resid(B%shape(1))
+        integer :: max_i
+        real(dp) :: r_tol
+
+        ! Variables used by znaupd
+        integer :: info, ido, n, ncv, ldv, lworkl
+        character :: bmat
+        character(len=2) :: which
+        complex(dp), allocatable :: V(:,:)
+        integer :: iparam(11), ipntr(14)
+        complex(dp), allocatable :: workd(:)
+        complex(dp), allocatable :: workl(:)
+        real(dp), allocatable :: rwork(:)
+
+        integer :: x_1,x_2,y_1,y_2,i
+        complex(dp), allocatable :: temp(:)
+
+        ! Select correct routine for B matvecs
+        procedure(mv), pointer :: mv_B => null()
+        if (full) then
+            mv_B => CSR_mv
+        else
+            mv_B => CSR_mv_sym
+        end if
+
+        ! Set optional arguments
+        if (present(v0)) then
+            resid = v0
+            info = 1 ! User supplied starting vector
+        else
+            resid = 0
+            info = 0 ! Random starting vector
+        end if
+
+        if (present(max_iter)) then
+            max_i = max_iter
+        else
+            max_i = 300
+        end if
+
+        if (present(tol)) then
+            r_tol = tol
+        else
+            r_tol = default_ARPACK_tol
+        end if
+
+        ! Set variables used by RCI calls
+        ido = 0
+        bmat = 'G'
+        n = B%shape(1)
+        which = 'LM'
+        ncv = 2*n_eigs ! Recomended by ARPACK documentation
+        allocate(V(n,ncv))
+        ldv = n
+        iparam(1) = 1
+        iparam(3) = max_i
+        iparam(4) = 1
+        iparam(7) = 3
+        allocate(workd(3*n))
+        lworkl = 3*ncv**2 + 5*ncv
+        allocate(workl(lworkl))
+        allocate(rwork(ncv))
+
+        ! Allocate temp vector used during RCI
+        allocate(temp(n))
+
+        write(stdout,*) ""
+        write(stdout,*) "Finding eigenvalues with znaupd..."
+
+        do while (ido /= 99)
+            call znaupd(ido, bmat, n, which, n_eigs, r_tol, resid, ncv, V, ldv,&
+                        iparam, ipntr, workd, workl, lworkl, rwork, info)
+
+            if (ido == -1) then
+                ! Perform (A-shift*B)^-1*B*x = y
+                x_1 = ipntr(1)
+                x_2 = ipntr(1) + n - 1
+                y_1 = ipntr(2)
+                y_2 = ipntr(2) + n - 1
+                call mv_B(B,workd(x_1:x_2),temp)
+                call precond%solve(workd(y_1:y_2),temp)
+
+            else if (ido == 1) then
+                ! Perform (A-shift*B)^-1*B*x = y, with B*x stored in workd(ipntr(3))
+                x_1 = ipntr(3)
+                x_2 = ipntr(3) + n - 1
+                y_1 = ipntr(2)
+                y_2 = ipntr(2) + n - 1
+                call precond%solve(workd(y_1:y_2),workd(x_1:x_2))
+
+            else if (ido == 2) then
+                ! Perform B*x = y
+                x_1 = ipntr(1)
+                x_2 = ipntr(1) + n - 1
+                y_1 = ipntr(2)
+                y_2 = ipntr(2) + n - 1
+                call mv_B(B,workd(x_1:x_2),workd(y_1:y_2))
+
+            else if (ido == 3) then
+                write(stderr,*) "ido = 3 returned by znaupd, but user supplied shifts not implemented."
+                stop
+            end if
+        end do
+
+        call postprocess_ARPACK(eigs,vecs,B,mv_B,temp,V,ldv,shift,bmat,n,which,n_eigs,r_tol,resid,ncv,iparam,ipntr,&
+                                workd,workl,lworkl,rwork,info)
+    end subroutine drive_ARPACK_precond
+
+    subroutine drive_ARPACK_GMRES(GMRES,precond,B,full,shift,n_eigs,eigs,vecs,v0,max_iter,tol)
+        type(zFGMRES), intent(inout) :: GMRES
+        type(block_PC), intent(inout) :: precond
+        type(CSR_matrix), intent(in) :: B
+        logical, intent(in) :: full
+        complex(dp), intent(in) :: shift
+        integer, intent(in) :: n_eigs
+        complex(dp), intent(out) :: eigs(:)
+        complex(dp), intent(out) :: vecs(:,:)
+        complex(dp), optional, intent(in) :: v0(:)
+        integer, optional, intent(in) :: max_iter
+        real(dp), optional, intent(in) :: tol
+
+        ! Actual values of optional agruments
+        complex(dp) :: resid(B%shape(1))
+        integer :: max_i
+        real(dp) :: r_tol
+
+        ! Variables used by znaupd
+        integer :: info, ido, n, ncv, ldv, lworkl
+        character :: bmat
+        character(len=2) :: which
+        complex(dp), allocatable :: V(:,:)
+        integer :: iparam(11), ipntr(14)
+        complex(dp), allocatable :: workd(:)
+        complex(dp), allocatable :: workl(:)
+        real(dp), allocatable :: rwork(:)
+
+        integer :: x_1,x_2,y_1,y_2,i
+        complex(dp), allocatable :: temp(:)
+
+        ! Select correct routine for B matvecs
+        procedure(mv), pointer :: mv_B => null()
+        if (full) then
+            mv_B => CSR_mv
+        else
+            mv_B => CSR_mv_sym
+        end if
+
+        ! Set optional arguments
+        if (present(v0)) then
+            resid = v0
+            info = 1 ! User supplied starting vector
+        else
+            resid = 0
+            info = 0 ! Random starting vector
+        end if
+
+        if (present(max_iter)) then
+            max_i = max_iter
+        else
+            max_i = 300
+        end if
+
+        if (present(tol)) then
+            r_tol = tol
+        else
+            r_tol = default_ARPACK_tol
+        end if
+
+        ! Set variables used by RCI calls
+        ido = 0
+        bmat = 'G'
+        n = B%shape(1)
+        which = 'LM'
+        ncv = 2*n_eigs ! Recomended by ARPACK documentation
+        allocate(V(n,ncv))
+        ldv = n
+        iparam(1) = 1
+        iparam(3) = max_i
+        iparam(4) = 1
+        iparam(7) = 3
+        allocate(workd(3*n))
+        lworkl = 3*ncv**2 + 5*ncv
+        allocate(workl(lworkl))
+        allocate(rwork(ncv))
+
+        ! Allocate temp vector used during RCI
+        allocate(temp(n))
+
+        write(stdout,*) ""
+        write(stdout,*) "Finding eigenvalues with znaupd..."
+
+        do while (ido /= 99)
+            call znaupd(ido, bmat, n, which, n_eigs, r_tol, resid, ncv, V, ldv,&
+                        iparam, ipntr, workd, workl, lworkl, rwork, info)
+
+            if (ido == -1) then
+                ! Perform (A-shift*B)^-1*B*x = y
+                x_1 = ipntr(1)
+                x_2 = ipntr(1) + n - 1
+                y_1 = ipntr(2)
+                y_2 = ipntr(2) + n - 1
+                call mv_B(B,workd(x_1:x_2),temp)
+                call GMRES%solve(workd(y_1:y_2),temp,precond)
+
+            else if (ido == 1) then
+                ! Perform (A-shift*B)^-1*B*x = y, with B*x stored in workd(ipntr(3))
+                x_1 = ipntr(3)
+                x_2 = ipntr(3) + n - 1
+                y_1 = ipntr(2)
+                y_2 = ipntr(2) + n - 1
+                call GMRES%solve(workd(y_1:y_2),workd(x_1:x_2),precond)
+
+            else if (ido == 2) then
+                ! Perform B*x = y
+                x_1 = ipntr(1)
+                x_2 = ipntr(1) + n - 1
+                y_1 = ipntr(2)
+                y_2 = ipntr(2) + n - 1
+                call mv_B(B,workd(x_1:x_2),workd(y_1:y_2))
+
+            else if (ido == 3) then
+                write(stderr,*) "ido = 3 returned by znaupd, but user supplied shifts not implemented."
+                stop
+            end if
+        end do
+
+        call postprocess_ARPACK(eigs,vecs,B,mv_B,temp,V,ldv,shift,bmat,n,which,n_eigs,r_tol,resid,ncv,iparam,ipntr,&
+                                workd,workl,lworkl,rwork,info)
+    end subroutine drive_ARPACK_GMRES
+
+    subroutine postprocess_ARPACK(eigs,vecs,B,mv_B,temp,V,ldv,shift,bmat,n,which,n_eigs,r_tol,resid,ncv,iparam,ipntr,&
+                                workd,workl,lworkl,rwork,info)
+        complex(dp), intent(out) :: eigs(:)
+        complex(dp), intent(out) :: vecs(:,:)
+        type(CSR_matrix), intent(in) :: B
+        complex(dp), intent(inout) :: temp(:)
+        procedure(mv), pointer, intent(in) :: mv_B
+        complex(dp), intent(inout) :: V(:,:)
+        integer, intent(in) :: ldv
+        complex(dp), intent(in) :: shift
+        character, intent(in) :: bmat
+        integer, intent(in) :: n
+        character(len=2), intent(in) :: which
+        integer, intent(in) :: n_eigs
+        real(dp), intent(in) :: r_tol
+        complex(dp), intent(inout) :: resid(:)
+        integer, intent(in) :: ncv
+        integer, intent(in) :: iparam(11)
+        integer, intent(inout) :: ipntr(14)
+        complex(dp), intent(in) :: workd(:)
+        complex(dp), intent(inout) :: workl(:)
+        integer, intent(in) :: lworkl
+        real(dp), intent(in) :: rwork(:)
+        integer, intent(inout) :: info
+
+        ! Variables used by zneupd
+        logical :: rvec
+        character :: howmny
+        logical, allocatable :: select(:)
+        integer :: nconv
+        complex(dp), allocatable :: d(:)
+        complex(dp), allocatable :: workev(:)
+
+        integer :: i
+
+        if (info /= 0) then
+            ! ARPACK did not converge, or some other error occurred
+            write(stderr,'(a,i0)') "znaupd exited with info = ", info
+            write(stderr,*) "Please consult znaupd documentation in ARPACK-ng for explanation"
+            stop
+        end if
+
+        ! ARPACK converged, extract eigenvalues and eigenvectors
+        nconv = iparam(5)
+        rvec = .true.
+        howmny = 'A'
+        allocate(select(ncv),d(nconv),workev(2*ncv))
+        call zneupd(rvec, howmny, select, d, V, ldv, shift, workev, bmat, n, which, n_eigs, r_tol, resid, &
+                    ncv, V, ldv, iparam, ipntr, workd, workl, lworkl, rwork, info)
+
+        if (info /= 0) then
+            ! Some error occurred in zneupd
+            write(stderr,'(a,i0)') "zneupd exited with info = ", info
+            write(stderr,*) "Please consult zneupd documentation in ARPACK-ng for explanation"
+            stop
+        end if
+
+        eigs = d(1:n_eigs)
+        vecs = V(:,1:n_eigs)
+
+        ! Apply B normalization to eigenvectors (complex-syms)
+        do i=1,n_eigs
+            call mv_B(B,vecs(:,i),temp)
+            vecs(:,i) = vecs(:,i)/sqrt(zdotu(n,vecs(:,i),1,temp,1))
+        end do
+
+        write(stdout,*) "Done!"
+        write(stdout,*) "Eigenvalues: "
+        do i = 1,n_eigs
+            write(stdout,*) eigs(i)
+        end do
+        write(stdout,*) ""
+
+    end subroutine postprocess_ARPACK
 end module eig_tools
