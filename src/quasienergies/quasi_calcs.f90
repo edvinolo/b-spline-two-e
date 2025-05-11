@@ -1,0 +1,520 @@
+module quasi_calcs
+    use kind_tools
+    use constants_tools
+    use stdlib_math, only: linspace, logspace
+    use sparse_array_tools, only: CSR_matrix
+    use block_tools, only: block_CS, block_diag_CS
+    use orbital_tools
+    use input_tools
+    use PARDISO_tools, only: PARDISO_solver
+    use ILU0_tools, only: ILU0
+    use precond_tools, only: block_PC
+    use GMRES_tools, only: zFGMRES
+    use eig_tools, only: drive_ARPACK_SI, FEAST
+    use quasi_circ
+    use quasi_floquet
+    use omp_lib, only: omp_get_wtime
+    implicit none
+
+    ! Misc. integer variables
+    integer :: n_states
+    integer, parameter :: n_temp = 2 ! How many eigs to find when doing follow calcs
+
+    ! Hamiltonian
+    type(CSR_matrix) :: H
+    type(CSR_matrix) :: S
+    type(block_CS) :: H_block
+
+    ! PARDISO solver object for shift and invert
+    type(PARDISO_solver) :: solver
+
+    ! zFGMRES solver object for iterative shift and invert
+    type(zFGMRES) :: GMRES
+
+    ! block_PC object for preconditioning GMRES
+    type(block_PC) :: precond
+
+    ! ILU0 object for test
+    ! type(ILU0) :: PC_ILU0
+
+    ! Result variables
+    complex(dp), allocatable :: eigs(:,:)
+    complex(dp), allocatable :: vecs(:,:,:)
+    complex(dp), allocatable :: eigs_i(:)
+    complex(dp), allocatable :: vecs_i(:,:)
+
+    ! Timing variables
+    real(dp) :: t_1_quasi,t_2_quasi
+
+    ! Used for debugging the solver implementations. Could be removed when comfortable that things are working
+    ! real(dp), allocatable :: dtest_vec(:,:)
+    ! complex(dp), allocatable :: ztest_vec(:)
+
+    complex(dp), external :: zdotu
+contains
+    subroutine omega_scan(H_0,S_block,D,bas,shift,res_dir)
+        type(block_diag_CS), intent(in) :: H_0
+        type(block_diag_CS), intent(inout) :: S_block
+        type(block_CS), intent(in) :: D
+        type(basis), intent(in) :: bas
+        complex(dp), intent(in) :: shift
+        character(len=*), intent(in) :: res_dir
+
+        real(dp) :: V_0
+        real(dp) :: omega(n_calc)
+        real(dp) :: intensity
+
+        integer :: i
+
+        call start_timer()
+
+        omega = linspace(calc_param(1),calc_param(2),n_calc)
+        intensity = other_param
+
+        call allocate_result(bas)
+
+        call S_block%to_CS(S,.false.)
+
+        do i = 1,n_calc
+            call print_params(i,intensity,omega(i),shift)
+            V_0 = field_strength(intensity,omega(i))
+            call compute_quasi(H_0,S_block,D,bas,i,V_0,omega(i),shift,n_quasi,eigs(:,i),vecs(:,:,i))
+        end do
+
+        call cleanup_solvers()
+
+        call write_eigs(res_dir)
+        call write_omega(res_dir,omega)
+        call end_timer()
+    end subroutine omega_scan
+
+    subroutine intensity_scan(H_0,S_block,D,bas,shift,res_dir)
+        type(block_diag_CS), intent(in) :: H_0
+        type(block_diag_CS), intent(inout) :: S_block
+        type(block_CS), intent(in) :: D
+        type(basis), intent(in) :: bas
+        complex(dp), intent(in) :: shift
+        character(len=*), intent(in) :: res_dir
+
+        real(dp) :: V_0
+        real(dp) :: intensity(n_calc)
+        real(dp) :: omega
+
+        integer :: i
+
+        call start_timer()
+
+        intensity = logspace(log10(calc_param(1)),log10(calc_param(2)),n_calc)
+        omega = other_param
+
+        call allocate_result(bas)
+
+        call S_block%to_CS(S,.false.)
+
+        do i = 1,n_calc
+            call print_params(i,intensity(i),omega,shift)
+            V_0 = field_strength(intensity(i),omega)
+            call compute_quasi(H_0,S_block,D,bas,i,V_0,omega,shift,n_quasi,eigs(:,i),vecs(:,:,i))
+        end do
+
+        call cleanup_solvers()
+
+        call write_eigs(res_dir)
+        call write_intensity(res_dir,intensity)
+        call end_timer()
+    end subroutine intensity_scan
+
+    subroutine omega_follow(H_0,S_Block,D,bas,shift,res_dir)
+        type(block_diag_CS), intent(in) :: H_0
+        type(block_diag_CS), intent(inout) :: S_block
+        type(block_CS), intent(in) :: D
+        type(basis), intent(in) :: bas
+        complex(dp), intent(in) :: shift
+        character(len=*), intent(in) :: res_dir
+
+        real(dp) :: V_0
+        real(dp) :: omega(n_calc)
+        real(dp) :: intensity
+
+        integer :: i,j,max_i
+
+        call start_timer()
+
+        omega = linspace(calc_param(1),calc_param(2),n_calc)
+        intensity = other_param
+
+        call allocate_result(bas)
+        call allocate_temp_results()
+
+        call S_block%to_CS(S,.false.)
+
+        do i = 1,n_calc
+            V_0 = field_strength(intensity,omega(i))
+
+            if (i == 1) then 
+                call print_params(i,intensity,omega(i),shift)
+                call compute_quasi(H_0,S_block,D,bas,i,V_0,omega(i),shift,n_quasi,eigs(:,i),vecs(:,:,i))
+            else
+                do j = 1,n_quasi
+                    call print_params(i,intensity,omega(i),eigs(j,i-1),j)
+                    call compute_quasi(H_0,S_block,D,bas,i,V_0,omega(i),eigs(j,i-1),n_temp,eigs_i(:),vecs_i(:,:),vecs(:,j,i-1))
+                    max_i =  find_max_proj(vecs(:,j,i-1))
+                    eigs(j,i) = eigs_i(max_i)
+                    vecs(:,j,i) = vecs_i(:,max_i)
+                end do
+            end if
+        end do
+
+        call cleanup_solvers()
+
+        call write_eigs(res_dir)
+        call write_omega(res_dir,omega)
+        call end_timer()
+    end subroutine omega_follow
+
+    subroutine intensity_follow(H_0,S_Block,D,bas,shift,res_dir)
+        type(block_diag_CS), intent(in) :: H_0
+        type(block_diag_CS), intent(inout) :: S_block
+        type(block_CS), intent(in) :: D
+        type(basis), intent(in) :: bas
+        complex(dp), intent(in) :: shift
+        character(len=*), intent(in) :: res_dir
+
+        real(dp) :: V_0
+        real(dp) :: intensity(n_calc)
+        real(dp) :: omega
+
+        integer :: i,j,max_i
+
+        call start_timer()
+
+        intensity = logspace(log10(calc_param(1)),log10(calc_param(2)),n_calc)
+        omega = other_param
+
+        call allocate_result(bas)
+        call allocate_temp_results()
+
+        call S_block%to_CS(S,.false.)
+
+        do i = 1,n_calc
+            V_0 = field_strength(intensity(i),omega)
+
+            if (i == 1) then
+                call print_params(i,intensity(i),omega,shift) 
+                call compute_quasi(H_0,S_block,D,bas,i,V_0,omega,shift,n_quasi,eigs(:,i),vecs(:,:,i))
+            else
+                do j = 1,n_quasi
+                    call print_params(i,intensity(i),omega,eigs(j,i-1),j=j)
+                    call compute_quasi(H_0,S_block,D,bas,i,V_0,omega,eigs(j,i-1),n_temp,eigs_i(:),vecs_i(:,:),vecs(:,j,i-1))
+                    max_i =  find_max_proj(vecs(:,j,i-1))
+                    eigs(j,i) = eigs_i(max_i)
+                    vecs(:,j,i) = vecs_i(:,max_i)
+                end do
+            end if
+        end do
+
+        call cleanup_solvers()
+
+        call write_eigs(res_dir)
+        call write_intensity(res_dir,intensity)
+        call end_timer()
+
+    end subroutine intensity_follow
+
+    subroutine compute_quasi(H_0,S_Block,D,bas,i,V_0_i,omega_i,shift_i,n_eigs_out,eigs_out,vecs_out,v0)
+        type(block_diag_CS), intent(in) :: H_0
+        type(block_diag_CS), intent(inout) :: S_block
+        type(block_CS), intent(in) :: D
+        type(basis), intent(in) :: bas
+        integer, intent(in) :: i
+        real(dp), intent(in) :: V_0_i
+        real(dp), intent(in) :: omega_i
+        complex(dp), intent(in) :: shift_i
+        integer, intent(in) :: n_eigs_out
+        complex(dp), intent(out) :: eigs_out(:)
+        complex(dp), intent(out) :: vecs_out(:,:)
+        complex(dp), optional, intent(in) :: v0(:)
+
+        if (z_pol) then
+            ! H_0_shift = setup_H_0_floquet()
+        else
+            call setup_H_circ(H_block, bas, H_0, S_block, D, omega_i, shift_i, V_0_i)
+        end if
+
+        if (block_precond) then
+            if (i == 1) then
+                call precond%setup(n_relevant,bas%n_sym-n_relevant,H_block,couple_pq)
+            else
+                call precond%update(H_block)
+            end if
+        end if
+
+        call H_block%to_CS(H,.true.)
+
+        if (direct_solver) then
+            if (i == 1) call solver%setup(H%shape(1),H%nnz,H%data,H%index_ptr,H%indices)
+            call solver%factor(H%data,H%index_ptr,H%indices)
+            if (present(v0)) then
+                call drive_ARPACK_SI(H,solver,S,full,shift_i,n_eigs_out,eigs_out(:),vecs_out(:,:),v0=v0)
+            else
+                call drive_ARPACK_SI(H,solver,S,full,shift_i,n_eigs_out,eigs_out(:),vecs_out(:,:))
+            end if
+
+        else if (block_precond) then
+            if (i==1) then
+                call GMRES%setup(H,full)
+            else
+                call GMRES%update(H)
+            end if
+
+            if (present(v0)) then
+                call drive_ARPACK_SI(GMRES,precond,S,full,shift_i,n_eigs_out,eigs_out(:),vecs_out(:,:),v0=v0)
+            else
+                call drive_ARPACK_SI(GMRES,precond,S,full,shift_i,n_eigs_out,eigs_out(:),vecs_out(:,:))
+            end if
+        end if
+        ! call FEAST(H,S,.true.,full,(0.0_dp,0.0_dp),0.1_dp,eigs_i,vecs_i,N_eig)
+    end subroutine compute_quasi
+
+    subroutine cleanup_solvers()
+        if (direct_solver) then
+            call solver%cleanup()
+        end if
+
+        if (block_precond) then
+            call GMRES%cleanup()
+            call precond%cleanup()
+        end if
+    end subroutine cleanup_solvers
+
+    function field_strength(intensity,omega) result(res)
+        real(dp), intent(in) :: intensity
+        real(dp), intent(in) :: omega
+        real(dp) :: res
+
+        res = 0
+        if (gauge == 'l') res = E_0_au(intensity)
+        if (gauge == 'v') res = A_0_au(intensity,omega)
+
+        if (.not.z_pol) res = res/sqrt_2
+    end function field_strength
+
+    subroutine allocate_result(bas)
+        type(basis), intent(in) :: bas
+
+        n_states = compute_dim(bas)
+
+        allocate(eigs(n_quasi,n_calc))
+        allocate(vecs(n_states,n_quasi,n_calc), source = (0.0_dp,0.0_dp))
+
+    end subroutine allocate_result
+
+    subroutine allocate_temp_results()
+        allocate(eigs_i(n_temp),vecs_i(n_states,n_temp))
+    end subroutine allocate_temp_results
+
+    function compute_dim(bas) result(res)
+        type(basis), intent(in) :: bas
+        integer :: res
+
+        res = 0
+        if (z_pol) then
+            !TODO
+        else
+            res = sum(bas%syms%n_config)
+        end if
+
+
+    end function compute_dim
+
+    subroutine write_eigs(res_dir)
+        character(len=*), intent(in) :: res_dir
+
+        ! character(len=200) :: fmt
+        integer :: i,unit,j
+        open(file = res_dir//"energies.out", newunit = unit, action = 'write')
+
+        ! write(fmt,'(a,i0)')'(',
+        ! fmt = trim(fmt//'(es22.15,es22.15))')
+        ! write(fmt,'(a,i0,a)') '(', n_quasi,'("("es24.17,es24.17"j) "))' ! This should be readable by numpy.loadtxt
+        ! fmt = '(a,es24.17,es24.17,a)'
+        write(unit,'(a)') "# Energies in [a.u], each row is one point in parameter space"
+        do i = 1,n_calc
+            ! write(unit,fmt) eigs(:,i)
+            do j = 1,n_quasi
+                write(unit,'(a)', advance='no') '('
+
+                if (real(eigs(j,i),kind = dp)<0) then
+                    write(unit,'(es24.17e2)', advance='no') real(eigs(j,i),kind = dp)
+                else
+                    write(unit,'(es23.17e2)', advance='no') real(eigs(j,i),kind = dp)
+                end if
+
+                if (aimag(eigs(j,i))<0) then
+                    write(unit,'(es24.17e2)', advance='no') aimag(eigs(j,i))
+                else
+                    write(unit,'(a)', advance='no') '+'
+                    write(unit,'(es23.17e2)', advance='no') aimag(eigs(j,i))
+                end if
+
+                write(unit,'(a)', advance='no') 'j) '
+             end do
+            write(unit,*)''
+        end do
+
+        close(unit)
+    end subroutine write_eigs
+
+    subroutine write_omega(res_dir,omega)
+        character(len=*), intent(in) :: res_dir
+        real(dp), intent(in) :: omega(:)
+
+        integer :: i,unit
+        open(file = res_dir//"omega.out", newunit = unit, action = 'write')
+
+        write(unit,'(a)') "# omega [a.u]"
+        do i = 1,n_calc
+            write(unit,'(es24.17)') omega(i)
+        end do
+
+        close(unit)
+    end subroutine write_omega
+
+    subroutine write_intensity(res_dir,intensity)
+        character(len=*), intent(in) :: res_dir
+        real(dp), intent(in) :: intensity(:)
+
+        integer :: i,unit
+        open(file = res_dir//"intensity.out", newunit = unit, action = 'write')
+
+        write(unit,'(a)') "# intensity [W/cm^2]"
+        do i = 1,n_calc
+            write(unit,'(es24.17)') intensity(i)
+        end do
+
+        close(unit)
+    end subroutine write_intensity
+
+    subroutine print_params(iteration,intensity,omega,shift,j)
+        integer, intent(in) :: iteration
+        real(dp), intent(in) :: intensity
+        real(dp), intent(in) :: omega
+        complex(dp), intent(in) :: shift
+        integer, optional, intent(in) :: j
+
+        real(dp) :: U_p
+
+        U_p = A_0_au(intensity,omega)**2/4
+
+        write(6,*)
+        write(6,'(a,i0,a,i0)') 'Iteration: ', iteration, '/', n_calc
+
+        if (present(j)) then
+            write(6,'(a,i0,a,i0)') 'Eigenvalue: ', j, '/', n_quasi
+        end if
+
+        write(6,'(a,es15.4,es15.4,a)') 'Shift: ', shift, ' [a.u.]'
+        write(6,'(a,f10.7,a,f10.7,a)') 'Omega: ', omega, ' [a.u.], ', omega*au_to_eV, ' [eV]'
+        write(6,'(a,es15.4,a)') 'Intensity: ', intensity, ' [W/cm2]'
+        write(6,'(a,es15.4,a)') 'E_0: ', E_0_au(intensity), ' [a.u.]'
+        write(6,'(a,es15.4,a)') 'A_0: ', A_0_au(intensity,omega), ' [a.u.]'
+        write(6,'(a,es15.4,a,es15.4,a)') 'U_p: ', U_p, ' [a.u.], ', U_p*au_to_eV, ' [eV]'
+        write(6,*)
+    end subroutine print_params
+
+    subroutine reorder_blocks(bas,H_0_block,S_block,D)
+        type(basis), intent(inout) :: bas
+        type(block_diag_CS), intent(inout) :: H_0_block
+        type(block_diag_CS), intent(inout) :: S_block
+        type(block_CS), intent(inout) :: D
+
+        integer :: j,i
+
+        ! write(6,*) bas%syms%m
+        ! do i = 1,bas%n_sym
+        !     write(6,*) D%blocks(i,:)%nnz
+        ! end do
+
+        do i = 1,n_relevant
+            j = relevant_blocks(i)
+            if (j == i) cycle
+
+            ! Reorder the symmetry blocks
+            bas%syms([i,j]) = bas%syms([j,i])
+
+            ! Transform block diagonal matrices
+            H_0_block%blocks([i,j]) = H_0_block%blocks([j,i])
+            S_block%blocks([i,j]) = S_block%blocks([j,i])
+
+            ! Transform off-diagonal blocks
+            D%blocks([i,j],:) = D%blocks([j,i],:)
+            D%blocks(:,[i,j]) = D%blocks(:,[j,i])
+        end do
+
+        ! If using upper storage, make sure that only blocks in the upper triangular part are present
+        ! Transpose those blocks that are below diagonal
+        if (.not.full) then
+            do j = 1,bas%n_sym
+                do i = j+1,bas%n_sym
+                    if (D%blocks(i,j)%nnz /= 0) then
+                        call D%blocks(i,j)%transp(D%blocks(j,i))
+                        call D%blocks(i,j)%deall()
+                    end if
+                end do
+            end do
+        end if
+
+        ! write(6,*) bas%syms%m
+        ! do i = 1,bas%n_sym
+        !     write(6,*) D%blocks(i,:)%nnz
+        ! end do
+
+    end subroutine reorder_blocks
+
+    ! Finds the vector in vecs_i with maximum S projection on vec.
+    ! Puts the result in vecs_i(:,1) and the corresponding eigenvalue in eigs_i(1)
+    function find_max_proj(vec) result(res)
+        complex(dp), intent(in) :: vec(:)
+        integer :: res
+
+        integer :: n,i,max_i
+        real(dp) :: proj, max_proj
+        complex(dp), allocatable :: temp(:)
+
+        max_i = -1
+        max_proj = -1_dp
+        n = size(eigs_i)
+
+        allocate(temp(size(vec)))
+
+        if (full) then
+            call CSR_mv(S,vec,temp)
+        else
+            call CSR_mv_sym(S,vec,temp)
+        end if
+
+        do i = 1,n
+            proj = abs(zdotu(size(vec),vecs_i(:,i),1,temp,1))
+            write(stdout,'(a,es11.4,es11.4,a,es11.4)') 'Eig: ', real(eigs_i(i),kind=dp),aimag(eigs_i(i)), ', proj: ', proj
+            if (proj > max_proj) then
+                max_i = i
+                max_proj = proj
+            end if
+        end do
+
+        res = max_i
+    end function find_max_proj
+
+    subroutine start_timer()
+        t_1_quasi = omp_get_wtime()
+    end subroutine start_timer
+
+    subroutine end_timer()
+        t_2_quasi = omp_get_wtime()
+        write(stdout,*)
+        write(stdout,'(a,es11.4)') "Total time for quasienergy calculations (s): ", t_2_quasi - t_1_quasi
+        write(stdout,'(a,es11.4)') "Total time for quasienergy calculations (min): ", (t_2_quasi - t_1_quasi)/60_dp
+        write(stdout,'(a,es11.4)') "Total time for quasienergy calculations (h): ", (t_2_quasi - t_1_quasi)/(60_dp*60_dp)
+        write(stdout,*)
+    end subroutine end_timer
+end module quasi_calcs
