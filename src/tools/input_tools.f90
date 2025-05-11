@@ -1,8 +1,10 @@
 module input_tools
+    use kind_tools
     use dir_tools, only: is_dir
+    use iso_fortran_env, only: stdout => output_unit ,stderr => error_unit
     implicit none
 
-    !Basis input variables
+    ! Basis input variables
     character(len=:), allocatable :: basis_root_dir
     character(len=64) :: basis_output_dir
 
@@ -15,6 +17,7 @@ module input_tools
 
     character :: gauge
     logical :: z_pol
+    logical :: full
 
     namelist /basis_input/ &
     & basis_output_dir,&
@@ -31,7 +34,53 @@ module input_tools
     & max_l_1p,&
     & max_k,&
     & gauge,&
-    & z_pol
+    & z_pol,&
+    & full
+
+    ! Quasienergy input variables
+    character(len=:), allocatable :: basis_dir
+    character(len=64) :: basis_input_dir
+    character(len=:), allocatable :: quasi_root_dir
+    character(len=64) :: quasi_output_dir
+
+    character(len=:), allocatable :: calc
+    character(len=64) :: calc_type
+
+    real(dp) :: calc_param(2)
+    real(dp) :: calc_start
+    real(dp) :: calc_end
+    real(dp) :: other_param
+    integer :: n_calc
+    integer :: n_quasi
+    integer :: n_blocks(2)
+
+    complex(dp) :: gs_energy
+
+    logical :: store_vecs
+
+    logical :: direct_solver
+
+    logical :: block_precond
+    logical :: couple_pq
+    integer :: n_relevant
+    integer, allocatable :: relevant_blocks(:)
+
+    namelist /quasi_input/ &
+    & basis_input_dir,&
+    & quasi_output_dir,&
+    & calc_type,&
+    & calc_param,&
+    & other_param,&
+    & n_calc,&
+    & n_quasi,&
+    & n_blocks,&
+    & gs_energy,&
+    & store_vecs,&
+    & direct_solver,&
+    & block_precond,&
+    & couple_pq,&
+    & n_relevant,&
+    & relevant_blocks
 contains
     function get_input_file() result(res)
         character(len=:), allocatable :: res
@@ -41,13 +90,13 @@ contains
 
         n_command = command_argument_count()
         if(n_command>1) then
-            write(6,*)
-            write(6,*) "More than 1 command line arguments supplied. Only the first one is used, the rest is ignored."
-            write(6,*)
+            write(stderr,*)
+            write(stderr,*) "More than 1 command line arguments supplied. Only the first one is used, the rest is ignored."
+            write(stderr,*)
         else if (n_command == 0) then
-            write(6,*)
-            write(6,*) "No command line arguments supplied. You need to tell the program the name of your input file."
-            write(6,*)
+            write(stderr,*)
+            write(stderr,*) "No command line arguments supplied. You need to tell the program the name of your input file."
+            write(stderr,*)
             stop
         end if
 
@@ -56,41 +105,125 @@ contains
     end function get_input_file
 
     subroutine get_basis_input(input_file)
-        character(len=:), allocatable, intent(in) :: input_file
+        character(len=*), intent(in) :: input_file
+
+        logical :: bad_input
 
         open(unit=1,file=input_file,action='read')
         read(1,nml=basis_input)
         close(1)
 
+        bad_input = .false.
+
         basis_root_dir = trim(basis_output_dir)
         if (.not.is_dir(basis_root_dir)) then
-            write(6,*)
-            write(6,*) "Error! The basis_output_dir you supplied: ", basis_root_dir, " does not exist."
-            write(6,*) "You need to supply an exisiting directory to the basis_output_dir variable in the input file"
-            write(6,*)
-            stop
+            write(stderr,*)
+            write(stderr,*) "Error! The basis_output_dir you supplied: ", basis_root_dir, " does not exist."
+            write(stderr,*) "You need to supply an exisiting directory to the basis_output_dir variable in the input file"
+            write(stderr,*)
+            bad_input = .true.
         end if
 
         if ((gauge /= 'l') .and. (gauge /= 'v')) then
-            write(6,*)
-            write(6,*) "Bad gauge input parameter: ", gauge
-            write(6,*) "Must be l (length) or v (velocity)"
-            write(6,*)
-            stop
+            write(stderr,*)
+            write(stderr,*) "Bad gauge input parameter: ", gauge
+            write(stderr,*) "Must be l (length) or v (velocity)"
+            write(stderr,*)
+            bad_input = .true.
         end if
 
-        write(6,nml=basis_input)
+        write(stdout,*)
+        write(stdout,*) "Basis setup input:"
+        write(stdout,nml=basis_input)
+
+        if (bad_input) call error_bad_input()
     end subroutine get_basis_input
 
-    subroutine write_basis_input(basis_res_dir)
-        character(len=:), allocatable, intent(in) :: basis_res_dir
+    subroutine get_quasi_input(input_file)
+        character(len=*), intent(in) :: input_file
+
+        logical :: bad_input
+
+        open(unit=1,file=input_file,action='read')
+        read(1,nml=quasi_input)
+        close(1)
+
+        bad_input = .false.
+
+        basis_dir = trim(basis_input_dir)
+        if (.not.is_dir(basis_dir)) then
+            write(stderr,*)
+            write(stderr,*) "Error! The basis_input_dir you supplied: ", basis_dir, " does not exist."
+            write(stderr,*) "You need to supply an exisiting directory to the basis_input_dir variable in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        quasi_root_dir = trim(quasi_output_dir)
+        if (.not.is_dir(quasi_root_dir)) then
+            write(stderr,*)
+            write(stderr,*) "Error! The quasi_output_dir you supplied: ", quasi_root_dir, " does not exist."
+            write(stderr,*) "You need to supply an exisiting directory to the quasi_output_dir variable in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (any(calc_param<0)) then
+            write(stderr,*)
+            write(stderr,*) "Error! The calc_param not set: ", calc_param
+            write(stderr,*) "You need to supply an positive calc_param in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (other_param<0) then
+            write(stderr,*)
+            write(stderr,*) "Error! The other_param not set: ", other_param
+            write(stderr,*) "You need to supply an positive other_param in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (direct_solver.eqv.block_precond) then
+            write(stderr,*)
+            write(stderr,*) "Error! The options direct_solver and block_precond must differ: ", direct_solver, block_precond
+            write(stderr,*) "You need to supply correct values in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (block_precond) then
+            relevant_blocks = relevant_blocks(1:n_relevant)
+        else
+            relevant_blocks = relevant_blocks(1:1)
+        end if
+
+        write(stdout,*)
+        write(stdout,*) "Quasienergy input:"
+        write(stdout,nml=quasi_input)
+
+        if (bad_input) call error_bad_input()
+    end subroutine get_quasi_input
+
+    subroutine write_basis_input(res_dir)
+        character(len=:), allocatable, intent(in) :: res_dir
 
         integer :: unit
 
-        open(file = basis_res_dir // 'basis_input.dat', newunit = unit, action = 'write')
+        open(file = res_dir // 'basis_input.dat', newunit = unit, action = 'write')
         write(unit, nml = basis_input)
         close(unit)
     end subroutine write_basis_input
+
+    subroutine write_quasi_input(res_dir)
+        character(len=:), allocatable, intent(in) :: res_dir
+
+        integer :: unit
+
+        open(file = res_dir // 'quasi_input.dat', newunit = unit, action = 'write')
+        write(unit, nml = quasi_input)
+        close(unit)
+    end subroutine write_quasi_input
 
     subroutine set_basis_defaults()
         k = 6
@@ -106,5 +239,30 @@ contains
         max_l_1p = 5
         max_k = 4
         z_pol = .true.
+        full = .true.
     end subroutine set_basis_defaults
+
+    subroutine set_quasi_defaults()
+        basis_input_dir = "-"
+        quasi_output_dir = "-"
+        calc_type = "-"
+        calc_param = [-1.0_dp,-1.0_dp]
+        n_calc = 1
+        n_quasi = 1
+        other_param = -1.0_dp
+        n_blocks = [1,0]
+        gs_energy = (0.0_dp,0.0_dp)
+        store_vecs = .false.
+        direct_solver = .true.
+        block_precond = .false.
+        couple_pq = .false.
+        n_relevant = 200
+        allocate(relevant_blocks(n_relevant),source = -1)
+    end subroutine set_quasi_defaults
+
+    subroutine error_bad_input()
+        write(stderr,*)
+        write(stderr,*) "Some of the input parameters were bad, see warnings above"
+        stop
+    end subroutine error_bad_input
 end module input_tools
