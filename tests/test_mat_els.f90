@@ -308,8 +308,8 @@ program mat_els_test
     !write(6,*) "Sparsity H: ", real(H_spr%nnz)/(H_spr%shape(1)**2)
     ! write(6,*) "Sparsity S: ", real(S_spr%nnz)/(S_spr%shape(1)**2)
 
-    call H_diag%init(bas%n_sym,H_spr)
-    call S_diag%init(bas%n_sym,S_spr)
+    call H_diag%init(bas%n_sym)
+    call S_diag%init(bas%n_sym)
     !$omp parallel do
     do i = 1,bas%n_sym
         call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,Rk,R_p,H_diag%blocks(i),S_diag%blocks(i),.false.)
@@ -439,7 +439,7 @@ program mat_els_test
 
     write(6,*) 'Constructing dipoles ...'
     t_1_dip = omp_get_wtime()
-    call dip%init([bas%n_sym,bas%n_sym],dip_block_spr)
+    call dip%init([bas%n_sym,bas%n_sym])
     !$omp parallel do private(i,syms,compute) schedule(dynamic)
     do j = 1,bas%n_sym
         syms(2) = bas%syms(j)
@@ -454,7 +454,7 @@ program mat_els_test
         end do
     end do
     !$omp end parallel do
-    call block_sum%init([bas%n_sym,bas%n_sym],dip_block_spr)
+    call block_sum%init([bas%n_sym,bas%n_sym])
     !$omp parallel do private(i,syms,compute) schedule(dynamic)
     do j = 1,bas%n_sym
         syms(2) = bas%syms(j)

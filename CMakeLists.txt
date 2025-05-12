@@ -21,7 +21,7 @@ include_directories("${CMAKE_BINARY_DIR}/src/mat_els")
 include_directories("${CMAKE_BINARY_DIR}/src/quasienergies")
 
 # Set compiler flags that should always be on
-add_compile_options(-Wall -fopenmp)
+add_compile_options(-Wall -fopenmp -cpp)
 add_link_options(-fopenmp)
 
 # Set flags for compilation choices
@@ -42,7 +42,12 @@ find_package(GSL REQUIRED)
 find_package(MKL CONFIG REQUIRED)
 find_package(fortran_stdlib REQUIRED)
 find_package(arpackng REQUIRED)
-find_library(feast NAMES feast PATHS "$ENV{FEASTROOT}/lib/x64/" REQUIRED)
+
+# Check if FEAST is available
+find_library(feast NAMES feast PATHS "$ENV{FEASTROOT}/lib/x64/")
+if (feast)
+    add_compile_definitions(WITH_FEAST)
+endif()
 
 # Add subdirectories
 add_subdirectory(src/tools)

@@ -136,6 +136,7 @@ contains
         vecs = vecs(:,index)
     end subroutine sort_eig
 
+#if defined(WITH_FEAST)
     subroutine FEAST(A,B,sym,full,mid,rad,eigs,vecs,M)
         type(CSR_matrix), intent(inout) :: A
         type(CSR_matrix), intent(inout) :: B
@@ -202,6 +203,7 @@ contains
         end do
 
     end subroutine FEAST
+#endif
 
     subroutine drive_ARPACK_PARDISO(A,solver,B,full,shift,n_eigs,eigs,vecs,v0,max_iter,tol)
         type(CSR_matrix), intent(in) :: A

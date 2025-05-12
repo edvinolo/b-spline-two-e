@@ -10,7 +10,11 @@ module quasi_calcs
     use ILU0_tools, only: ILU0
     use precond_tools, only: block_PC
     use GMRES_tools, only: zFGMRES
+#if defined(WITH_FEAST)
     use eig_tools, only: drive_ARPACK_SI, FEAST
+#else
+    use eig_tools, only: drive_ARPACK_SI
+#endif
     use quasi_circ
     use quasi_floquet
     use omp_lib, only: omp_get_wtime
