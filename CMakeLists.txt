@@ -31,7 +31,7 @@ else()
     add_compile_options(-O3 -march=native)
 endif()
 
-# Tell MKL to use 32-bit interface
+# Tell MKL to use 32-bit integer interface
 set(MKL_INTERFACE lp64)
 
 # Tell MKL to use GNU OpenMP
@@ -42,6 +42,11 @@ find_package(GSL REQUIRED)
 find_package(MKL CONFIG REQUIRED)
 find_package(fortran_stdlib REQUIRED)
 find_package(arpackng REQUIRED)
+
+# Find BLAS and LAPACK, use MKL versions
+set(BLA_VENDOR Intel10_64lp)
+find_package(BLAS REQUIRED)
+find_package(LAPACK REQUIRED)
 
 # Check if FEAST is available
 find_library(feast NAMES feast PATHS "$ENV{FEASTROOT}/lib/x64/")
