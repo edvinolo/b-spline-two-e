@@ -108,10 +108,11 @@ contains
         res = .true.
     end function dip_allowed
 
-    pure function count_configs(term,max_l_1p,n_b,eigs) result(res)
+    pure function count_configs(term,max_l_1p,n_b,max_n_b,eigs) result(res)
         type(sym), intent(in) :: term
         integer, intent(in) :: max_l_1p
         integer, intent(in) :: n_b
+        integer, intent(in) :: max_n_b
         double complex, dimension(:,:), allocatable, intent(in) :: eigs
         type(config), dimension(:), allocatable :: res
 
@@ -134,7 +135,7 @@ contains
                 orbs(2)%pi = (mod(j,2)/=0)
                 do n_i = 1,n_b
                     if (j==i) then
-                        do n_j = 1,n_i
+                        do n_j = 1,min(n_i,max_n_b)
                             eqv = (i==j).and.(n_i==n_j)
                             energy_1p = eigs(n_i,i) + eigs(n_j,j)
                             if (consistent(orbs,term,eqv)) then!.and.(real(energy_1p)<1.5d1)) then
@@ -146,7 +147,7 @@ contains
                             end if
                         end do
                     else
-                        do n_j = 1,n_b
+                        do n_j = 1,min(n_b,max_n_b)
                             eqv = (i==j).and.(n_i==n_j)
                             energy_1p = eigs(n_i,i) + eigs(n_j,j)
                             if (consistent(orbs,term,eqv)) then!.and.(real(energy_1p)<1.5d1)) then
@@ -179,11 +180,12 @@ contains
         end if
     end function count_terms
 
-    pure subroutine init_basis(this,max_L,max_l_1p,n_b,z_pol,eigs)
+    pure subroutine init_basis(this,max_L,max_l_1p,n_b,max_n_b,z_pol,eigs)
         class(basis), intent(inout) :: this
         integer, intent(in) ::  max_L
         integer, intent(in) :: max_l_1p
         integer, intent(in) :: n_b
+        integer, intent(in) :: max_n_b
         logical, intent(in) :: z_pol
         double complex, dimension(:,:), allocatable, intent(in) :: eigs
 
@@ -195,7 +197,7 @@ contains
         this%syms(1)%l = 0
         this%syms(1)%m = 0
         this%syms(1)%pi = .false.
-        this%syms(1)%configs = count_configs(this%syms(1),max_l_1p,n_b,eigs)
+        this%syms(1)%configs = count_configs(this%syms(1),max_l_1p,n_b,max_n_b,eigs)
         this%syms(1)%n_config = size(this%syms(1)%configs)
 
         ptr = 2
@@ -206,7 +208,7 @@ contains
                 this%syms(ptr)%m = 0
                 this%syms(ptr)%pi = (mod(l,2)/=0)
                 !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
-                this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,eigs)
+                this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,max_n_b,eigs)
                 this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
                 ptr = ptr + 1
             end do
@@ -221,7 +223,7 @@ contains
                         this%syms(ptr)%m = m
                         this%syms(ptr)%pi = par
                         !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
-                        this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,eigs)
+                        this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,max_n_b,eigs)
                         this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
                         ptr = ptr + 1
                     end do

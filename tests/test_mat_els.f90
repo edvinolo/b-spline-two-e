@@ -46,6 +46,8 @@ program mat_els_test
     type(block_CS) :: dip,block_sum
     character :: gauge
     logical :: compute
+    double precision :: r_2_max = -1.d0
+    integer :: max_n_b
 
     !for ploting orbitals
     double complex, dimension(:), allocatable :: vals
@@ -64,7 +66,7 @@ program mat_els_test
     m = 3
     Z = 2
     h_max = 0.5d0
-    r_max = 5.d0
+    r_max = 30.d0
     k_GL = splines%k + 6
     call generate_grid(k,m,Z,h_max,r_max,grid)
     call splines%init(k,grid)
@@ -297,7 +299,14 @@ program mat_els_test
     write(6,*) res
     !stop
 
-    call bas%init(2,2,splines%n_b,.false.,eigs_v)
+    r_2_max = 15.d0
+    if (r_2_max < 0) then
+        max_n_b = splines%n_b
+    else
+        max_n_b = splines%find_max_n_b(r_2_max)
+    end if
+
+    call bas%init(2,2,splines%n_b,max_n_b,.false.,eigs_v)
     ! call H_block%init(bas%syms(2)%n_config,bas%syms(2)%n_config,.true.)
     ! call S_block%init(bas%syms(2)%n_config,bas%syms(2)%n_config,.true.)
     write(6,*) bas%syms(1)%l,bas%syms(1)%m,bas%syms(1)%pi,bas%syms(1)%n_config

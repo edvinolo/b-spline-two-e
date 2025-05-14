@@ -9,7 +9,7 @@ module input_tools
     character(len=64) :: basis_output_dir
 
     integer :: k,m,Z,max_k,k_GL,max_L,max_l_1p
-    double precision :: h_max,r_max
+    double precision :: h_max,r_max,r_2_max
 
     integer :: CAP_order
     double precision :: CAP_r_0
@@ -26,6 +26,7 @@ module input_tools
     & Z,&
     & h_max,&
     & r_max,&
+    & r_2_max,&
     & k_GL,&
     & CAP_order,&
     & CAP_r_0,&
@@ -229,11 +230,12 @@ contains
         k = 6
         m = 3
         Z = 2
-        h_max = 0.5d0
-        r_max = 15.d0
+        h_max = 0.5_dp
+        r_max = 15.0_dp
+        r_2_max = -1_dp
         k_GL = k + 6
         CAP_order = 2
-        CAP_r_0 = 10.d0
+        CAP_r_0 = 10.0_dp
         CAP_eta = dcmplx(1.d-3,0.d0)
         max_L = 2
         max_l_1p = 5

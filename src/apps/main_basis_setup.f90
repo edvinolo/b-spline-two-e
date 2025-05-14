@@ -19,6 +19,7 @@ program main_basis_setup
 
     double precision, dimension(:), allocatable :: grid
     type(b_spline) :: splines
+    integer :: max_n_b_2
     double complex, dimension(:,:), allocatable :: S
     double complex, dimension(:,:), allocatable :: radial_dip
     type(sparse_4d) :: r_k,r_m_k
@@ -53,6 +54,13 @@ program main_basis_setup
     write(6,*) "n_b: ", splines%n_b
     write(6,*) splines%knots
 
+    ! Limit the radial extent of the second electron if r_2_max > 0
+    if (r_2_max > 0) then
+        max_n_b_2 = splines%find_max_n_b(r_2_max)
+    else
+        max_n_b_2=splines%n_b
+    end if
+
     call CAP_c%init(CAP_order,CAP_r_0,CAP_eta)
 
     call pot%init(Z)
@@ -82,7 +90,7 @@ program main_basis_setup
         call setup_H_one_particle(pot,CAP_c,i,splines,k_GL,H_vec(i)%data)
     end do
 
-    call bas%init(max_L,max_l_1p,splines%n_b,z_pol,eigs_v)
+    call bas%init(max_L,max_l_1p,splines%n_b,max_n_b_2,z_pol,eigs_v)
 
     call H_diag%init(bas%n_sym)
     call S_diag%init(bas%n_sym)
