@@ -2,6 +2,7 @@ module sparse_array_tools
     use kind_tools
     use bspline_tools
     use stdlib_sorting, only: sort_index
+    use stdlib_hashmaps, only: chaining_hashmap_type
     implicit none
 
     type, public :: sparse_4d
@@ -39,6 +40,22 @@ module sparse_array_tools
         procedure :: init => init_sparse_Slater
         procedure :: count_nnz => count_nnz_Slater
     end type sparse_Slater
+
+    type, public :: val_type
+        double precision,allocatable :: val
+    end type val_type
+
+    type, public :: Nd_DOK
+        integer :: N
+        integer :: N_val
+        type(chaining_hashmap_type) :: map
+        class(*),allocatable :: temp_val
+        type(val_type) :: val
+    contains
+        procedure :: init => init_Nd_DOK
+        procedure :: set_val => set_val_Nd_DOK
+        procedure :: get_val => get_val_Nd_DOK
+    end type Nd_DOK
 
     type, abstract, public :: CS_matrix
         integer, dimension(2) :: shape
@@ -362,7 +379,10 @@ contains
         double precision, dimension(0:max_k,n_b,n_b,n_b,n_b), intent(out) :: R
 
         integer :: n,m,k
+        ! integer :: i,j,nnz
 
+        write(6,*)
+        write(6,*) 'Constructing R_K array...'
         R = 0.d0
         do k = 0,max_k
             do n=1,r_k%nnz
@@ -385,7 +405,116 @@ contains
                     + r_d_k%data(n,k)
             end do
         end do
+        write(6,*) 'Done!'
+
+        ! nnz = 0
+        ! do i = 1,n_b
+        !     do j = 1,n_b
+        !         do n = 1,n_b
+        !             do m = 1,n_b
+        !                 do k = 0,max_k
+        !                     if (abs(R(k,m,n,j,i)) > 1.0d-12) nnz = nnz +1
+        !                 end do
+        !             end do
+        !         end do
+        !     end do
+        ! end do
+
+        ! write(6,*) 'R_k density: ', real(nnz,kind=8)/(n_b**4)
+
     end subroutine compute_R_k
+
+    subroutine compute_R_K_map(r_d_k,r_k,r_m_k,max_k,n_b,R)
+        type(sparse_6d), intent(in) :: r_d_k
+        type(sparse_4d), intent(in) :: r_k
+        type(sparse_4d), intent(in) :: r_m_k
+        integer, intent(in) :: max_k
+        integer, intent(in) :: n_b
+        type(Nd_DOK), intent(inout) :: R(0:max_k)
+
+        integer :: n,m,k
+        double precision :: val
+
+        write(6,*)
+        write(6,*) 'Constructing R_K DOK array...'
+        ! call R%init(4,max_k+1) !Four indices, and max_k+1 values
+        do k = 0,max_k
+            call R(k)%init(4,max_k+1)
+            do n=1,r_k%nnz
+                do m=1,r_k%nnz
+                    if (r_k%iv(n)<r_k%iv(m)) then
+                        val = r_k%data(n,k)*r_m_k%data(m,k)
+                    else if (r_k%iv(n)>r_k%iv(m)) then
+                        val = r_k%data(m,k)*r_m_k%data(n,k)
+                    end if
+                    call R(k)%set_val([r_k%i(n),r_k%i(m),r_k%j(n),r_k%j(m)],val)
+                end do
+            end do
+
+            do n=1,r_d_k%nnz
+                val = r_d_k%data(n,k)
+                call R(k)%set_val([r_d_k%i(n),r_d_k%j(n),r_d_k%i_p(n),r_d_k%j_p(n)],val)
+                call R(k)%set_val([r_d_k%j(n),r_d_k%i(n),r_d_k%j_p(n),r_d_k%i_p(n)],val)
+            end do
+        end do
+        write(6,*) 'Done!'
+    end subroutine compute_R_K_map
+
+    subroutine init_Nd_DOK(this,N,N_val)
+        class(Nd_DOK), intent(out) :: this
+        integer, intent(in) :: N
+        integer, intent(in) :: N_val
+
+        call this%map%init()
+        this%N = N
+        this%N_val = N_val
+        !allocate(this%val%val(N_val))
+    end subroutine init_Nd_DOK
+
+    subroutine set_val_Nd_DOK(this,indices,val)
+        class(Nd_DOK), intent(inout) :: this
+        integer, intent(in) :: indices(this%N)
+        double precision, intent(in) :: val
+
+        logical :: exists
+
+        call this%map%key_test(indices,exists)
+
+        associate (temp_val => this%temp_val)
+        if (exists) then
+            call this%map%get_other_data(indices,temp_val)
+            select type (temp_val)
+            type is (val_type)
+                temp_val%val = temp_val%val + val
+                ! write(6,*) temp_val%val
+                call this%map%set_other_data(indices,temp_val)
+            class default
+                error stop "Wrong dynamic type of temp_val!"
+            end select
+        else
+            this%val%val = val
+            call this%map%map_entry(indices,this%val)
+        end if
+        end associate
+
+    end subroutine set_val_Nd_DOK
+
+    subroutine get_val_Nd_DOK(this,indices,values)
+        class(Nd_DOK), intent(inout) :: this
+        integer, intent(in) :: indices(this%N)
+        double precision, intent(out) :: values
+
+        call this%map%get_other_data(indices,this%temp_val)
+
+        associate (temp_val => this%temp_val)
+        select type (temp_val)
+        type is (val_type)
+            values = temp_val%val
+        class default
+            error stop 'Wrong dynamic type of temp_val'
+        end select
+        end associate
+    end subroutine get_val_Nd_DOK
 
     subroutine init_CS(this,shape,nnz)
         class(CS_matrix), intent(inout) :: this
