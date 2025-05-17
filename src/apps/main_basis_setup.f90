@@ -21,7 +21,7 @@ program main_basis_setup
     type(b_spline) :: splines
     integer :: max_n_b_2
     double complex, dimension(:,:), allocatable :: S
-    double complex, dimension(:,:), allocatable :: radial_dip
+    type(radial_dipole) :: radial_dip
     type(sparse_4d) :: r_k,r_m_k
     type(sparse_6d) :: r_d_k
     type(sparse_Slater) :: Rk
@@ -97,8 +97,8 @@ program main_basis_setup
     !$omp parallel do
     do i = 1,bas%n_sym
         call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,Rk,R_p,H_diag%blocks(i),S_diag%blocks(i),full)
-        write(6,'(a,i0,a,es0.4)') "Sparsity H(", i,"): ", real(H_diag%blocks(i)%nnz)/(H_diag%blocks(i)%shape(1)**2)
-        write(6,'(a,i0,a,es0.4)') "Sparsity S(", i,"): ", real(S_diag%blocks(i)%nnz)/(S_diag%blocks(i)%shape(1)**2)
+        write(6,'(a,i0,a,es0.4)') "Density H(", i,"): ", real(H_diag%blocks(i)%nnz)/(H_diag%blocks(i)%shape(1)**2)
+        write(6,'(a,i0,a,es0.4)') "Density S(", i,"): ", real(S_diag%blocks(i)%nnz)/(S_diag%blocks(i)%shape(1)**2)
     end do
     !$omp end parallel do
     call H_diag%compute_shape()
@@ -109,7 +109,6 @@ program main_basis_setup
     ! Compute dipole matrix elements
     write(6,*)
     write(6,*) "Constructing dipoles..."
-    allocate(radial_dip(splines%n_b,splines%n_b))
     call setup_radial_dip(splines,k_GL,radial_dip,gauge)
     t_start = omp_get_wtime()
     do q = -1,1

@@ -9,9 +9,19 @@ module mat_els
     use orbital_tools
     implicit none
 
+    procedure(dip_red_1p_fun), pointer :: dip_red_1p
+
+    type, public :: radial_dipole
+        character :: gauge
+        double complex, allocatable :: r_mat(:,:)
+        double complex, allocatable :: r_inv_mat(:,:)
+        double complex, allocatable :: dr_mat(:,:)
+    end type radial_dipole
+
     abstract interface
         subroutine rad_dip(b_splines,i,j,c_i,c_j,i_r,k_GL,r,w,radial_dip)
-            import b_spline
+            import :: b_spline
+            import :: radial_dipole
             type(b_spline), intent(in) :: b_splines
             integer, intent(in) :: i
             integer, intent(in) :: j
@@ -21,8 +31,17 @@ module mat_els
             integer, intent(in) :: k_GL
             double precision, dimension(k_GL), intent(in) :: r
             double precision, dimension(k_GL), intent(in) :: w
-            double complex, dimension(:,:), intent(out) :: radial_dip
+            type(radial_dipole), intent(inout) :: radial_dip
         end subroutine rad_dip
+
+        pure function dip_red_1p_fun(confs,i,radial_dip) result(res)
+            import :: config
+            import :: radial_dipole
+            type(config), dimension(2), intent(in) :: confs
+            integer, intent(in) :: i
+            type(radial_dipole), intent(in) :: radial_dip
+            double complex :: res
+        end function dip_red_1p_fun
     end interface
 contains
     subroutine setup_H_one_particle(potential,CAP_c,l,b_splines,k_GL,H)
@@ -101,7 +120,7 @@ contains
     subroutine setup_radial_dip(b_splines,k_GL,radial_dip,gauge)
         type(b_spline), intent(in) :: b_splines
         integer, intent(in) :: k_GL
-        double complex, dimension(:,:), intent(out) ::  radial_dip
+        type(radial_dipole), intent(out) :: radial_dip
         character, intent(in) :: gauge
 
         integer :: i_b,j_b,i_r
@@ -112,14 +131,17 @@ contains
 
         if (gauge == 'l') then
             compute_radial_dip => compute_radial_dip_len
+            dip_red_1p => dip_red_1p_len
+            allocate(radial_dip%r_mat(b_splines%n_b,b_splines%n_b),source=dcmplx(0.d0,0.d0))
         else if (gauge == 'v') then
             compute_radial_dip => compute_radial_dip_vel
+            dip_red_1p => dip_red_1p_vel
+            allocate(radial_dip%r_inv_mat(b_splines%n_b,b_splines%n_b),source=dcmplx(0.d0,0.d0))
+            allocate(radial_dip%dr_mat(b_splines%n_b,b_splines%n_b),source=dcmplx(0.d0,0.d0))
         else
             write(6,*) "Error! Unrecognized gauge option in for radial dipole: ", gauge
             stop
         end if
-
-        radial_dip = 0.d0
 
         call g_l%init(b_splines%breakpoints,k_GL)
         allocate(c_i(b_splines%n),c_j(b_splines%n))
@@ -333,14 +355,14 @@ contains
         integer, intent(in) :: k_GL
         double precision, dimension(k_GL), intent(in) :: r
         double precision, dimension(k_GL), intent(in) :: w
-        double complex, dimension(:,:), intent(out) :: radial_dip
+        type(radial_dipole), intent(inout) :: radial_dip
 
         integer :: i_sum
         double precision :: B_i,B_j
         do i_sum = 1, k_GL
             B_i = b_splines%eval_d(r(i_sum),c_i,i_r)
             B_j = b_splines%eval_d(r(i_sum),c_j,i_r)
-            radial_dip(i,j) = radial_dip(i,j) + w(i_sum)*r(i_sum)*B_i*B_j
+            radial_dip%r_mat(i,j) = radial_dip%r_mat(i,j) + w(i_sum)*r(i_sum)*B_i*B_j
         end do
     end subroutine compute_radial_dip_len
 
@@ -354,14 +376,16 @@ contains
         integer, intent(in) :: k_GL
         double precision, dimension(k_GL), intent(in) :: r
         double precision, dimension(k_GL), intent(in) :: w
-        double complex, dimension(:,:), intent(out) :: radial_dip
+        type(radial_dipole), intent(inout) :: radial_dip
 
         integer :: i_sum
-        double precision :: B_i,D_B_j
+        double precision :: B_i,B_j,D_B_j
         do i_sum = 1, k_GL
             B_i = b_splines%eval_d(r(i_sum),c_i,i_r)
+            B_j = b_splines%eval_d(r(i_sum),c_j,i_r)
             D_B_j = b_splines%d_eval_d(r(i_sum),c_j,1,i_r)
-            radial_dip(i,j) = radial_dip(i,j) + dcmplx(0.d0,-1.d0)*w(i_sum)*B_i*D_B_j
+            radial_dip%dr_mat(i,j) = radial_dip%dr_mat(i,j) + dcmplx(0.d0,-1.d0)*w(i_sum)*B_i*D_B_j
+            radial_dip%r_inv_mat(i,j) = radial_dip%r_inv_mat(i,j) + dcmplx(0.d0,-1.d0)*w(i_sum)*B_i*B_j/r(i_sum)
         end do
     end subroutine compute_radial_dip_vel
 
@@ -689,7 +713,7 @@ contains
         type(sym), dimension(2), intent(in) :: syms
         type(config), dimension(2), intent(in) :: confs
         double complex, dimension(:,:), intent(in) :: S
-        double complex, dimension(:,:), intent(in) :: radial_dip
+        type(radial_dipole), intent(in) :: radial_dip
         double complex ::  res
 
         double complex :: red_mat, red_mat_ex
@@ -712,7 +736,7 @@ contains
         integer, intent(in) :: L_2
         type(config), dimension(2), intent(in) :: confs
         double complex, dimension(:,:), intent(in) :: S
-        double complex, dimension(:,:), intent(in) :: radial_dip
+        type(radial_dipole), intent(in) :: radial_dip
         double complex :: res
 
         double complex :: res_1, res_2
@@ -740,10 +764,10 @@ contains
         res = res_1 + res_2
     end function dip_red_mat
 
-    pure function dip_red_1p(confs,i,radial_dip) result(res)
+    pure function dip_red_1p_len(confs,i,radial_dip) result(res)
         type(config), dimension(2), intent(in) :: confs
         integer, intent(in) :: i
-        double complex, dimension(:,:), intent(in) :: radial_dip
+        type(radial_dipole), intent(in) :: radial_dip
         double complex :: res
 
         integer :: n,n_p,l,l_p
@@ -753,8 +777,31 @@ contains
         l = confs(1)%l(i)
         l_p = confs(2)%l(i)
 
-        res = radial_dip(n,n_p)*C_red_mat(1,l,l_p)
-    end function dip_red_1p
+        res = radial_dip%r_mat(n,n_p)*C_red_mat(1,l,l_p)
+    end function dip_red_1p_len
+
+    pure function dip_red_1p_vel(confs,i,radial_dip) result(res)
+        type(config), dimension(2), intent(in) :: confs
+        integer, intent(in) :: i
+        type(radial_dipole), intent(in) :: radial_dip
+        double complex :: res
+
+        integer :: n,n_p,l,l_p
+
+        n = confs(1)%n(i)
+        n_p = confs(2)%n(i)
+        l = confs(1)%l(i)
+        l_p = confs(2)%l(i)
+
+        ! Quantum theory of angular momentum, Varshalovich et al p.486
+        if (abs(l-l_p)/=1) then
+            res = 0.d0
+        else if (l>l_p) then
+            res = sqrt(real(l,kind=8))*(radial_dip%dr_mat(n,n_p)-(l_p+1)*radial_dip%r_inv_mat(n,n_p))
+        else !l<l_p
+            res = -sqrt(real(l_p,kind=8))*(radial_dip%dr_mat(n,n_p)+l_p*radial_dip%r_inv_mat(n,n_p))
+        end if
+    end function dip_red_1p_vel
 
     pure function ang_dip_red(L_1,L_2,confs) result(res)
         integer, intent(in) :: L_1

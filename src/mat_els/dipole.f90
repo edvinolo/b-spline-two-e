@@ -10,7 +10,7 @@ contains
         integer, intent(in) :: q
         type(b_spline), intent(in) :: b_splines
         double complex, dimension(:,:), intent(in) ::  S
-        double complex, dimension(:,:), intent(in) :: radial_dip
+        type(radial_dipole), intent(in) :: radial_dip
         type(CSR_matrix), intent(out) :: dip_block
         logical, intent(in) :: compute
 
@@ -111,7 +111,7 @@ contains
         type(sym), dimension(2), intent(in) :: syms
         integer, intent(in) :: q
         double complex, dimension(:,:), intent(in) ::  S
-        double complex, dimension(:,:), intent(in) :: radial_dip
+        type(radial_dipole), intent(in) :: radial_dip
         double complex, dimension(:,:), intent(out) :: dip_block_dense
 
         double precision :: ang

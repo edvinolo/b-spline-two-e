@@ -20,6 +20,7 @@ program mat_els_test
     double complex, dimension(:,:), allocatable :: H,S,r_mat,dr_mat,vecs,ac,dip_block
     double complex, dimension(:), allocatable :: eigs,vec,vec_gs,vec_excited,vec_dip
     double precision, dimension(:), allocatable :: eigs_real
+    type(radial_dipole) :: radial_dip
     type(sparse_4d) :: r_k,r_m_k
     type(sparse_6d) :: r_d_k
     type(sparse_Slater) :: Rk
@@ -38,6 +39,7 @@ program mat_els_test
     type(config),dimension(2) :: confs
     type(sym), dimension(2) :: syms
     double precision, dimension(:,:,:,:,:),allocatable :: R_p
+    type(Nd_DOK), allocatable :: R_p_map(:)
     double complex :: res
     integer, dimension(2) :: nnz
     type(CSC_matrix) H_spc,S_spc
@@ -59,10 +61,10 @@ program mat_els_test
 
     type(CAP) :: CAP_c
     integer :: CAP_order = 2
-    double precision :: CAP_r_0 = 20.d0
+    double precision :: CAP_r_0 = 40.d0
     double complex :: CAP_eta = dcmplx(1.d-3,0.d0)
 
-    k = 4
+    k = 8
     m = 3
     Z = 2
     h_max = 0.5d0
@@ -90,7 +92,7 @@ program mat_els_test
     call setup_S(splines,k_GL,S)
 
     gauge = 'v'
-    call setup_radial_dip(splines,k_GL,r_mat,gauge)
+    call setup_radial_dip(splines,k_GL,radial_dip,gauge)
 
     max_k = 4
     ! allocate(r_k(0:max_k,size(splines%breakpoints)-1,splines%n_b,splines%n_b))
@@ -239,7 +241,7 @@ program mat_els_test
         confs(1)%n = i
         do j = 1,splines%n_b
             confs(2)%n = j
-            vec(i) = vec(i) + vecs_v(0)%data(j,1)*dip_red_1p(confs,1,r_mat)
+            vec(i) = vec(i) + vecs_v(0)%data(j,1)*dip_red_1p(confs,1,radial_dip)
         end do
     end do
     vec = (-1)**1*three_j0(1,1,0)*vec
@@ -273,6 +275,8 @@ program mat_els_test
     ! end do
 
     call compute_R_k(r_d_k,r_k,r_m_k,max_k,splines%n_b,R_p)
+    ! allocate(R_p_map(0:max_k))
+    ! call compute_R_K_map(r_d_k,r_k,r_m_k,max_k,splines%n_b,R_p_map)
 
     ! res = 0.d0
     ! do j_b_p = 1,splines%n_b
@@ -299,14 +303,14 @@ program mat_els_test
     write(6,*) res
     !stop
 
-    r_2_max = 15.d0
+    r_2_max = -15.d0
     if (r_2_max < 0) then
         max_n_b = splines%n_b
     else
         max_n_b = splines%find_max_n_b(r_2_max)
     end if
 
-    call bas%init(2,2,splines%n_b,max_n_b,.false.,eigs_v)
+    call bas%init(2,3,splines%n_b,max_n_b,.false.,eigs_v)
     ! call H_block%init(bas%syms(2)%n_config,bas%syms(2)%n_config,.true.)
     ! call S_block%init(bas%syms(2)%n_config,bas%syms(2)%n_config,.true.)
     write(6,*) bas%syms(1)%l,bas%syms(1)%m,bas%syms(1)%pi,bas%syms(1)%n_config
