@@ -49,6 +49,13 @@ program main_quasienergies
         call reorder_blocks(bas,H_0_block,S_block,D)
     end if
 
+    if (reduce_basis) then
+        call red_basis(bas,H_0_block,S_block,D)
+    end if
+
+    ! Store information about the actual basis that was used
+    call bas%store(quasi_res_dir)
+
     if (calc_type == 'omega') then
         call omega_scan(H_0_block,S_block,D,bas,gs_energy,quasi_res_dir)
     else if (calc_type == 'intensity') then

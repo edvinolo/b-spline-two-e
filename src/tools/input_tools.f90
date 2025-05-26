@@ -63,6 +63,7 @@ module input_tools
 
     logical :: block_precond
     logical :: couple_pq
+    logical :: reduce_basis
     integer :: n_relevant
     integer, allocatable :: relevant_blocks(:)
 
@@ -80,6 +81,7 @@ module input_tools
     & direct_solver,&
     & block_precond,&
     & couple_pq,&
+    & reduce_basis,&
     & n_relevant,&
     & relevant_blocks
 contains
@@ -193,7 +195,15 @@ contains
             bad_input = .true.
         end if
 
-        if (block_precond) then
+        if (reduce_basis.and.block_precond) then
+            write(stderr,*)
+            write(stderr,*) "Error! reduce_basis and block_precond can not be used together: ", reduce_basis, block_precond
+            write(stderr,*) "You need to supply correct values in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (block_precond.or.reduce_basis) then
             relevant_blocks = relevant_blocks(1:n_relevant)
         else
             relevant_blocks = relevant_blocks(1:1)
@@ -258,6 +268,7 @@ contains
         direct_solver = .true.
         block_precond = .false.
         couple_pq = .false.
+        reduce_basis = .false.
         n_relevant = 200
         allocate(relevant_blocks(n_relevant),source = -1)
     end subroutine set_quasi_defaults

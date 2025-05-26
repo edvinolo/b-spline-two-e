@@ -475,6 +475,46 @@ contains
 
     end subroutine reorder_blocks
 
+    subroutine red_basis(bas,H_0_block,S_Block,D)
+        type(basis), intent(inout) :: bas
+        type(block_diag_CS), intent(inout) :: H_0_block
+        type(block_diag_CS), intent(inout) :: S_block
+        type(block_CS), intent(inout) :: D
+
+        integer :: j,i
+
+        type(CSR_matrix), allocatable :: H_temp(:),S_temp(:)
+        type(CSR_matrix), allocatable :: D_temp(:,:)
+
+        allocate(H_temp(n_relevant),S_temp(n_relevant),D_temp(n_relevant,n_relevant))
+
+        bas%n_sym = n_relevant
+        bas%syms = bas%syms(relevant_blocks)
+
+        H_0_block%block_shape = [n_relevant,n_relevant]
+        do i = 1,n_relevant
+            H_temp(i) = H_0_block%blocks(relevant_blocks(i))
+        end do
+        call move_alloc(H_temp,H_0_block%blocks)
+        call H_0_block%compute_shape()
+
+        S_block%block_shape = [n_relevant,n_relevant]
+        do i = 1,n_relevant
+            S_temp(i) = S_block%blocks(relevant_blocks(i))
+        end do
+        call move_alloc(S_temp,S_block%blocks)
+        call S_block%compute_shape()
+
+        D%block_shape = [n_relevant,n_relevant]
+        do j = 1,n_relevant
+            do i = 1,n_relevant
+                D_temp(i,j) = D%blocks(relevant_blocks(i),relevant_blocks(j))
+            end do
+        end do
+        call move_alloc(D_temp,D%blocks)
+        call D%compute_shape()
+    end subroutine red_basis
+
     ! Finds the vector in vecs_i with maximum S projection on vec.
     ! Puts the result in vecs_i(:,1) and the corresponding eigenvalue in eigs_i(1)
     function find_max_proj(vec) result(res)
