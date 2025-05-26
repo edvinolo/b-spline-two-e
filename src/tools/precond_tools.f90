@@ -13,9 +13,11 @@ module precond_tools
         type(CSR_matrix) :: H_pp
         type(CSR_matrix) :: H_pq
         type(block_diag_CS) :: H_qq_0
+        type(CSR_matrix) :: H_qq
         type(PARDISO_solver) :: solv_pp
         ! type(ILU0) :: solv_pp
-        type(PARDISO_solver), allocatable :: solv_qq(:)
+        ! type(PARDISO_solver), allocatable :: solv_qq(:)
+        type(PARDISO_solver) :: solv_qq
         ! type(ILU0), allocatable :: solv_qq(:)
         integer, allocatable :: block_ptr(:)
         complex(dp), allocatable :: t_1(:),t_2(:),t_3(:)
@@ -87,6 +89,7 @@ contains
         do i = 1,this%n_q
             this%H_qq_0%blocks(i) = H%blocks(this%n_p+i,this%n_p+i)
         end do
+        call this%H_qq_0%to_CS(this%H_qq,.true.)
 
         ! Assemble the coupling from Q to P
         if (this%couple_pq) then
@@ -110,19 +113,27 @@ contains
         call this%solv_pp%factor(this%H_pp%data,this%H_pp%index_ptr,this%H_pp%indices)
 
         ! Factorize H_qq_0
-        if (first) allocate(this%solv_qq(this%n_q))
-        associate(H_qq => this%H_qq_0)
-        do i = 1,this%n_q
-            if (first) then
-                call this%solv_qq(i)%setup(H_qq%blocks(i)%shape(1),H_qq%blocks(i)%nnz,H_qq%blocks(i)%data,&
-                                        H_qq%blocks(i)%index_ptr,H_qq%blocks(i)%indices)
-                ! call this%solv_qq(i)%setup(H_qq%blocks(i))
-            else
-                ! call this%solv_qq(i)%update(H_qq%blocks(i))
-            end if
-            call this%solv_qq(i)%factor(H_qq%blocks(i)%data,H_qq%blocks(i)%index_ptr,H_qq%blocks(i)%indices)
-        end do
-        end associate
+        if (first) then
+            call this%solv_qq%setup(this%H_qq%shape(1),this%H_qq%nnz,this%H_qq%data,&
+                                    this%H_qq%index_ptr,this%H_qq%indices)
+            ! call this%solv_qq(i)%setup(H_qq%blocks(i))
+        else
+            ! call this%solv_qq(i)%update(H_qq%blocks(i))
+        end if
+        call this%solv_qq%factor(this%H_qq%data,this%H_qq%index_ptr,this%H_qq%indices)
+        ! if (first) allocate(this%solv_qq(this%n_q))
+        ! associate(H_qq => this%H_qq_0)
+        ! do i = 1,this%n_q
+        !     if (first) then
+        !         call this%solv_qq(i)%setup(H_qq%blocks(i)%shape(1),H_qq%blocks(i)%nnz,H_qq%blocks(i)%data,&
+        !                                 H_qq%blocks(i)%index_ptr,H_qq%blocks(i)%indices)
+        !         ! call this%solv_qq(i)%setup(H_qq%blocks(i))
+        !     else
+        !         ! call this%solv_qq(i)%update(H_qq%blocks(i))
+        !     end if
+        !     call this%solv_qq(i)%factor(H_qq%blocks(i)%data,H_qq%blocks(i)%index_ptr,H_qq%blocks(i)%indices)
+        ! end do
+        ! end associate
     end subroutine update_block_PC
 
     subroutine solve_block_PC(this,x,b)
@@ -173,13 +184,15 @@ contains
         ! call this%solv_pp%solve(t_2(i_1:i_2),t_1(i_1:i_2))
 
         ! Compute t_2_q = H_qq_0^-1*t_1_q
-        do i = 1,this%n_q
-            i_1 = this%block_ptr(i)
-            i_2 = this%block_ptr(i+1) - 1
-            call this%solv_qq(i)%solve(H_qq_0%blocks(i)%data,H_qq_0%blocks(i)%index_ptr,&
-                                        H_qq_0%blocks(i)%indices,t_2(i_1:i_2),t_1(i_1:i_2))
-            ! call this%solv_qq(i)%solve(t_2(i_1:i_2),t_1(i_1:i_2))
-        end do
+        i_1 = this%block_ptr(1)
+        call this%solv_qq%solve(this%H_qq%data,this%H_qq%index_ptr,this%H_qq%indices,t_2(i_1:),t_1(i_1:))
+        ! do i = 1,this%n_q
+        !     i_1 = this%block_ptr(i)
+        !     i_2 = this%block_ptr(i+1) - 1
+        !     call this%solv_qq(i)%solve(H_qq_0%blocks(i)%data,H_qq_0%blocks(i)%index_ptr,&
+        !                                 H_qq_0%blocks(i)%indices,t_2(i_1:i_2),t_1(i_1:i_2))
+        !     ! call this%solv_qq(i)%solve(t_2(i_1:i_2),t_1(i_1:i_2))
+        ! end do
 
         if (this%couple_pq) then
             i_1 = this%block_ptr(0)
@@ -213,10 +226,13 @@ contains
         call this%solv_pp%cleanup()
 
         call this%H_qq_0%deall()
-        do i = 1,this%n_q
-            call this%solv_qq(i)%cleanup()
-        end do
-        deallocate(this%solv_qq,this%block_ptr,this%t_1,this%t_2,this%t_3)
+        call this%H_qq%deall()
+        call this%solv_qq%cleanup()
+        ! do i = 1,this%n_q
+        !     call this%solv_qq(i)%cleanup()
+        ! end do
+        ! deallocate(this%solv_qq)
+        deallocate(this%block_ptr,this%t_1,this%t_2,this%t_3)
 
         if (this%couple_pq) call this%H_pq%deall()
     end subroutine cleanup_block_PC

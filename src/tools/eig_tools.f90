@@ -192,13 +192,17 @@ contains
             write(6,*) eigs(i)
         end do
 
-        allocate(temp_V(B%shape(1)))
+        allocate(temp_v(B%shape(1)))
         ! Normalize the eigenvectors.
         ! It seems like FEAST already normalizes them correctly, but I don't see anything in the docs that mentions this.
         do i=1,M
             ! Should use a sparse gemv routine here!
             ! call gemv('N',B%s,N,dcmplx(1.d0,0.d0),B,N,vecs(:,i),1,dcmplx(0.d0,0.d0),temp_v,1)
-            call CSR_mv(B,vecs(:,i),temp_V)
+            if (full) then
+                call CSR_mv(B,vecs(:,i),temp_v)
+            else
+                call CSR_mv_sym(B,vecs(:,i),temp_v)
+            end if
             vecs(:,i) = vecs(:,i)/sqrt(zdotu(B%shape(1),vecs(:,i),1,temp_v,1))
         end do
 

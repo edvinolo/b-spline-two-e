@@ -131,6 +131,7 @@ contains
             orbs(1)%l = i
             orbs(1)%pi = (mod(i,2)/=0)
             do j = 0,i
+                ! if (j+term%l > max_l_1p+1) cycle !Limit the angular momentum of second electron
                 orbs(2)%l = j
                 orbs(2)%pi = (mod(j,2)/=0)
                 do n_i = 1,n_b

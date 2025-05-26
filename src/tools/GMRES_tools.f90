@@ -4,6 +4,7 @@ module GMRES_tools
     use iso_fortran_env, only: stdout => output_unit, stderr => error_unit
     use sparse_array_tools, only: CSR_dsymv
     use precond_tools
+    use omp_lib, only: omp_get_wtime
     implicit none
 
     type, public :: zFGMRES
@@ -17,7 +18,7 @@ module GMRES_tools
         real(dp) :: tol
         integer :: max_iter
         real(dp), allocatable :: tmp(:)
-        real(dp), allocatable :: x_work(:),b_work(:)
+        real(dp), allocatable :: x_work(:),b_work(:),dwork(:)
         complex(dp), allocatable :: zwork(:)
         integer :: ipar(128)
         real(dp) :: dpar(128)
@@ -82,7 +83,7 @@ module GMRES_tools
             end if
 
             if (.not.allocated(this%x_work)) then
-                allocate(this%x_work(2*this%n),this%b_work(2*this%n),this%zwork(2*this%n))
+                allocate(this%x_work(2*this%n),this%b_work(2*this%n),this%dwork(2*this%n),this%zwork(2*this%n))
             end if
         end subroutine setup_zFGMRES
 
@@ -146,23 +147,21 @@ module GMRES_tools
                 y(i) = 0
                 y(n+i) = 0
                 do j = this%ia(i),this%ia(i+1)-1
-                    y(i) = y(i) + this%a(j)*x(this%ja(j))
-                    y(i) = y(i) - this%b(j)*x(n+this%ja(j))
-                    y(n+i) = y(n+i) + this%a(j)*x(n+this%ja(j))
-                    y(n+i) = y(n+i) + this%b(j)*x(this%ja(j))
+                    y(i) = y(i) + this%a(j)*x(this%ja(j)) - this%b(j)*x(n+this%ja(j))
+                    ! y(i) = y(i) - this%b(j)*x(n+this%ja(j))
+                    y(n+i) = y(n+i) + this%a(j)*x(n+this%ja(j)) + this%b(j)*x(this%ja(j))
+                    ! y(n+i) = y(n+i) + this%b(j)*x(this%ja(j))
                 end do
             end do
             !$omp end do
 
-            !$omp barrier
-
             !$omp do reduction(+:y)
             do i = 1,n
                 do j = this%ia(i)+1,this%ia(i+1)-1
-                    y(this%ja(j)) = y(this%ja(j)) + this%a(j)*x(i)
-                    y(this%ja(j)) = y(this%ja(j)) - this%b(j)*x(n+i)
-                    y(n+this%ja(j)) = y(n+this%ja(j)) + this%a(j)*x(n+i)
-                    y(n+this%ja(j)) = y(n+this%ja(j)) + this%b(j)*x(i)
+                    y(this%ja(j)) = y(this%ja(j)) + this%a(j)*x(i) - this%b(j)*x(n+i)
+                    ! y(this%ja(j)) = y(this%ja(j)) - this%b(j)*x(n+i)
+                    y(n+this%ja(j)) = y(n+this%ja(j)) + this%a(j)*x(n+i) + this%b(j)*x(i)
+                    ! y(n+this%ja(j)) = y(n+this%ja(j)) + this%b(j)*x(i)
                 end do
             end do
             !$omp end do
@@ -228,7 +227,7 @@ module GMRES_tools
             type(block_PC), intent(inout) :: precond
 
             integer :: ido,x_1,x_2,y_1,y_2,i,itercount
-            real(dp), allocatable :: res(:)
+            ! real(dp) :: t_1,t_2
 
             call precond%solve(x,b)
             !$omp parallel do
@@ -268,12 +267,15 @@ module GMRES_tools
                 ! write(stdout,*) ido
 
                 if (ido == 1) then
+                    ! t_1 = omp_get_wtime()
                     ! Apply matvec
                     x_1 = this%ipar(22)
                     x_2 = this%ipar(22) + 2*this%n - 1
                     y_1 = this%ipar(23)
                     y_2 = this%ipar(23) + 2*this%n - 1
                     call this%mv(this%tmp(x_1:x_2),this%tmp(y_1:y_2))
+                    ! t_2 = omp_get_wtime()
+                    ! write(stdout,*) 'mv_time: ', t_2-t_1
 
                 else if (ido == 2) then
                     ! Check if residual less than tolerance
@@ -294,7 +296,10 @@ module GMRES_tools
                     end do
                     !$omp end parallel do
 
+                    ! t_1 = omp_get_wtime()
                     call precond%solve(this%zwork(this%n+1:2*this%n),this%zwork(1:this%n))
+                    ! t_2 = omp_get_wtime()
+                    ! write(stdout,*) 'precond_time: ', t_2-t_1
 
                     y_1 = this%ipar(23)
                     y_2 = this%ipar(23) + this%n
@@ -327,10 +332,6 @@ module GMRES_tools
 
             call dfgmres_get(2*this%n,this%x_work,this%b_work,ido,this%ipar,this%dpar,this%tmp,itercount)
 
-            allocate(res(2*this%n))
-            call this%mv(this%x_work,res)
-            res = res-this%b_work
-
             if (ido /= 0) then
                 write(stderr,*) "Error! dfgmres_get exited with RCI_request: ", ido
                 write(stderr,*) "Please consult dfgmres documentation"
@@ -348,7 +349,7 @@ module GMRES_tools
             class(zFGMRES), intent(inout) :: this
 
             deallocate(this%a,this%ia,this%ja,this%b)!,this%ib,this%jb)
-            deallocate(this%b_work,this%x_work,this%zwork,this%tmp)
+            deallocate(this%b_work,this%x_work,this%dwork,this%zwork,this%tmp)
         end subroutine cleanup_zFGMRES
 
 end module GMRES_tools
