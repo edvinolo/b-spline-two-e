@@ -51,7 +51,7 @@ module input_tools
     real(dp) :: calc_start
     real(dp) :: calc_end
     real(dp) :: other_param
-    integer :: n_calc
+    integer(int32) :: n_calc
     integer :: n_quasi
     integer :: n_blocks(2)
 

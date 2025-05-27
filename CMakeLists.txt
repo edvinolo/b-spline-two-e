@@ -22,6 +22,7 @@ include_directories("${CMAKE_BINARY_DIR}/src/quasienergies")
 
 # Set compiler flags that should always be on
 add_compile_options(-Wall -fopenmp -cpp)
+add_compile_options(-fdefault-integer-8) # Use 64-bit integers
 add_link_options(-fopenmp)
 
 # Set flags for compilation choices
@@ -32,7 +33,7 @@ else()
 endif()
 
 # Tell MKL to use 32-bit integer interface
-set(MKL_INTERFACE lp64)
+# set(MKL_INTERFACE lp64)
 
 # Tell MKL to use GNU OpenMP
 # set(MKL_THREADING gnu_thread)
