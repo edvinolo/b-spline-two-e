@@ -63,6 +63,9 @@ module input_tools
 
     logical :: block_precond
     logical :: couple_pq
+    integer :: n_precond
+    integer, allocatable :: precond_blocks(:), precond_blocks_in(:)
+
     logical :: reduce_basis
     integer :: n_relevant
     integer, allocatable :: relevant_blocks(:)
@@ -81,9 +84,13 @@ module input_tools
     & direct_solver,&
     & block_precond,&
     & couple_pq,&
+    & n_precond,&
+    & precond_blocks_in,&
     & reduce_basis,&
     & n_relevant,&
     & relevant_blocks
+
+    integer, private :: i
 contains
     function get_input_file() result(res)
         character(len=:), allocatable :: res
@@ -196,17 +203,36 @@ contains
         end if
 
         if (reduce_basis.and.block_precond) then
-            write(stderr,*)
-            write(stderr,*) "Error! reduce_basis and block_precond can not be used together: ", reduce_basis, block_precond
-            write(stderr,*) "You need to supply correct values in the input file"
-            write(stderr,*)
-            bad_input = .true.
+            if (n_precond > n_relevant) then
+                write(stderr,*)
+                write(stderr,*) "Error! n_precond is greater than n_relevant: ", n_precond, n_relevant
+                write(stderr,*) "You need to supply correct values in the input file"
+                write(stderr,*)
+                bad_input = .true.
+            end if
+
+            do i = 1,n_precond
+                if (.not.any(precond_blocks_in(i)==relevant_blocks)) then
+                    write(stderr,*)
+                    write(stderr,*) "Error! precond_blocks_in(i) not present in relevant_blocks: ",&
+                                    i, precond_blocks_in(i), relevant_blocks
+                    write(stderr,*) "You need to supply correct values in the input file"
+                    write(stderr,*)
+                    bad_input = .true.
+                end if
+            end do
         end if
 
-        if (block_precond.or.reduce_basis) then
+        if (reduce_basis) then
             relevant_blocks = relevant_blocks(1:n_relevant)
         else
             relevant_blocks = relevant_blocks(1:1)
+        end if
+
+        if (block_precond) then
+            precond_blocks_in = precond_blocks_in(1:n_precond)
+        else
+            precond_blocks_in = precond_blocks_in(1:1)
         end if
 
         write(stdout,*)
@@ -268,6 +294,8 @@ contains
         direct_solver = .true.
         block_precond = .false.
         couple_pq = .false.
+        n_precond = 200
+        allocate(precond_blocks_in(n_precond),source = -1)
         reduce_basis = .false.
         n_relevant = 200
         allocate(relevant_blocks(n_relevant),source = -1)

@@ -1,15 +1,18 @@
 &quasi_input
-basis_input_dir = 'basis_output/0008/'
+basis_input_dir = 'basis_output/0001/'
 quasi_output_dir = 'quasi_output'
-calc_type = 'omega'
-calc_param = 2.19d0,2.25d0
+calc_type = 'intensity'
+calc_param = 1.0d13,3.0d14
 n_calc = 10
 n_quasi = 2
-other_param = 1e12
+other_param = 0.7795
 gs_energy = (-2.9d0,0.0d0)
 direct_solver = .false.
+reduce_basis = .true.
+n_relevant = 10
+relevant_blocks(1:10)  = 1,3,4,5,6,7,13,14,15,16
 block_precond = .true.
 couple_pq =.false.
-n_relevant = 2
-relevant_blocks(1:3)  = 1,4
+n_precond = 4
+precond_blocks_in(1:4)  = 1,4,7,16
 /

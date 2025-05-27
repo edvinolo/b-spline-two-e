@@ -247,7 +247,7 @@ contains
 
         if (block_precond) then
             if (i == 1) then
-                call precond%setup(n_relevant,bas%n_sym-n_relevant,H_block,couple_pq)
+                call precond%setup(n_precond,bas%n_sym-n_precond,H_block,couple_pq)
             else
                 call precond%update(H_block)
             end if
@@ -439,8 +439,8 @@ contains
         !     write(6,*) D%blocks(i,:)%nnz
         ! end do
 
-        do i = 1,n_relevant
-            j = relevant_blocks(i)
+        do i = 1,n_precond
+            j = precond_blocks(i)
             if (j == i) cycle
 
             ! Reorder the symmetry blocks
@@ -481,7 +481,7 @@ contains
         type(block_diag_CS), intent(inout) :: S_block
         type(block_CS), intent(inout) :: D
 
-        integer :: j,i
+        integer :: j,i,ptr
 
         type(CSR_matrix), allocatable :: H_temp(:),S_temp(:)
         type(CSR_matrix), allocatable :: D_temp(:,:)
@@ -490,6 +490,17 @@ contains
 
         bas%n_sym = n_relevant
         bas%syms = bas%syms(relevant_blocks)
+
+        if (block_precond) then
+            allocate(precond_blocks(n_precond))
+            ptr = 1
+            do i = 1,n_relevant
+                if (relevant_blocks(i) == precond_blocks_in(ptr)) then
+                    precond_blocks(ptr) = i
+                    ptr = ptr + 1
+                end if
+            end do
+        end if
 
         H_0_block%block_shape = [n_relevant,n_relevant]
         do i = 1,n_relevant

@@ -4,10 +4,11 @@ gauge = 'v'
 z_pol = .false.
 k = 8
 k_GL = 14
-r_max = 15.d0
-CAP_r_0 = 10.d0
-CAP_eta = (1.0d-2,0.0d0)
+r_max = 35.d0
+r_2_max = 15.d0
+CAP_r_0 = 27.5d0
+CAP_eta = (5.0d-3,0.0d0)
 max_L = 2
-max_l_1p = 2
+max_l_1p = 3
 full = .false.
 /

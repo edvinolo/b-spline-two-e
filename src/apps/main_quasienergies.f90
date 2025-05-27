@@ -45,12 +45,14 @@ program main_quasienergies
         call setup_dip_circ(dip,D,gauge)
     end if
 
-    if (block_precond) then
-        call reorder_blocks(bas,H_0_block,S_block,D)
-    end if
-
     if (reduce_basis) then
         call red_basis(bas,H_0_block,S_block,D)
+    else
+        precond_blocks = precond_blocks_in
+    end if
+
+    if (block_precond) then
+        call reorder_blocks(bas,H_0_block,S_block,D)
     end if
 
     ! Store information about the actual basis that was used
