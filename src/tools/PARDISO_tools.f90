@@ -73,7 +73,7 @@ contains
         write(6,*) ""
         write(6,*) "Performing PARDISO setup..."
         this%phase = 11 !Analysis
-        call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
+        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
               this%idum, this%nrhs, this%iparm, this%msglvl, this%ddum, this%ddum, this%error)
 
         if (this%error.ne.0) then
@@ -91,7 +91,7 @@ contains
         write(6,*) ""
         write(6,*) "Performing PARDISO factorization..."
         this%phase = 22 !Numerical factorization
-        call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
+        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
               this%idum, this%nrhs, this%iparm, this%msglvl, this%ddum, this%ddum, this%error)
         write(6,*) "Done!"
     end subroutine PARDISO_factor
@@ -105,7 +105,7 @@ contains
         complex(dp), intent(inout) :: b(this%n)
 
         this%phase = 33 !Compute solution
-        call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
+        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
               this%idum, this%nrhs, this%iparm, this%msglvl, b, x, this%error)
 
         if (this%error.ne.0) then
@@ -118,7 +118,7 @@ contains
         class(PARDISO_solver), intent(inout) :: this
 
         this%phase = -1 !Release internal memory for solver
-        call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%ddum, this%idum, this%idum, &
+        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%ddum, this%idum, this%idum, &
               this%idum, this%nrhs, this%iparm, this%msglvl, this%ddum, this%ddum, this%error)
 
         deallocate(this%pt,this%iparm)
