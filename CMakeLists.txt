@@ -45,7 +45,7 @@ find_package(fortran_stdlib REQUIRED)
 find_package(arpackng REQUIRED)
 
 # Find BLAS and LAPACK, use MKL versions
-set(BLA_VENDOR Intel10_64lp)
+set(BLA_VENDOR Intel10_64ilp)
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
 
