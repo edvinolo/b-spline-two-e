@@ -1,5 +1,4 @@
 program test_gsl_3j
-    !use fgsl
     use wigner_tools
     use orbital_tools, only: config
     implicit none
@@ -29,6 +28,16 @@ program test_gsl_3j
             write(6,*) six_j(i,i,0,j,j,0), i,j
         end do
     end do
+
+    write(6,*)
+
+    do i=1,4
+        do j=1,4
+            write(6,*) i,j,three_j(i,1,j,-i,1,j-1)
+        end do
+    end do
+
+    write(6,*)
 
     configs(1)%l = [0,0]
     configs(2)%l=[2,2]
