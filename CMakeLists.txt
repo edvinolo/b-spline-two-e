@@ -19,6 +19,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 include_directories("${CMAKE_BINARY_DIR}/src/tools")
 include_directories("${CMAKE_BINARY_DIR}/src/mat_els")
 include_directories("${CMAKE_BINARY_DIR}/src/quasienergies")
+include_directories("${CMAKE_BINARY_DIR}/src/diagonalization")
 
 # Set compiler flags that should always be on
 add_compile_options(-Wall -fopenmp -cpp)
@@ -59,15 +60,18 @@ endif()
 add_subdirectory(src/tools)
 add_subdirectory(src/mat_els)
 add_subdirectory(src/quasienergies)
+add_subdirectory(src/diagonalization)
 
 # Add executables
 add_executable(basis_setup src/apps/main_basis_setup.f90)
 add_executable(quasi src/apps/main_quasienergies.f90)
+add_executable(diag src/apps/main_diagonalization.f90)
 
 # Link libraries to executable
 target_link_libraries(basis_setup mat_els tools)
 target_link_libraries(quasi quasienergies tools)
+target_link_libraries(diag diagonalization tools)
 
 # Install executable in binary direcetory
-set(executables basis_setup quasi)
+set(executables basis_setup quasi diag)
 install(TARGETS ${executables} DESTINATION bin)

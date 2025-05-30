@@ -362,7 +362,7 @@ contains
                 end if
 
                 write(unit,'(a)', advance='no') 'j) '
-             end do
+            end do
             write(unit,*)''
         end do
 

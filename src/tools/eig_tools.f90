@@ -123,7 +123,7 @@ contains
     subroutine sort_eig(n_b,eigs,vecs)
         integer, intent(in) :: n_b
         double complex, dimension(n_b), intent(inout) :: eigs
-        double complex, dimension(n_b,n_b), intent(inout) ::  vecs
+        double complex, dimension(:,:), intent(inout) ::  vecs
 
         integer, dimension(n_b) :: index
         double precision, dimension(n_b) :: eigs_real

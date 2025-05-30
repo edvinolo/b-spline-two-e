@@ -90,6 +90,24 @@ module input_tools
     & n_relevant,&
     & relevant_blocks
 
+    ! Diagonalization input variables
+    ! Some are shared with quasienergies so are not declared here
+    character(len=:), allocatable :: diag_root_dir
+    character(len=64) :: diag_output_dir
+
+    integer :: n_syms
+    integer, allocatable :: blocks(:)
+    integer, allocatable :: n_eigs(:)
+    complex(dp), allocatable :: target_energies(:)
+
+    namelist /diag_input/ &
+    & basis_input_dir,&
+    & diag_output_dir,&
+    & n_syms,&
+    & blocks,&
+    & n_eigs,&
+    & target_energies
+
     integer, private :: i
 contains
     function get_input_file() result(res)
@@ -242,6 +260,62 @@ contains
         if (bad_input) call error_bad_input()
     end subroutine get_quasi_input
 
+    subroutine get_diag_input(input_file)
+        character(len=*), intent(in) :: input_file
+
+        logical :: bad_input
+
+        open(unit=1,file=input_file,action='read')
+        read(1,nml=diag_input)
+        close(1)
+
+        bad_input = .false.
+
+        basis_dir = trim(basis_input_dir)
+        if (.not.is_dir(basis_dir)) then
+            write(stderr,*)
+            write(stderr,*) "Error! The basis_input_dir you supplied: ", basis_dir, " does not exist."
+            write(stderr,*) "You need to supply an exisiting directory to the basis_input_dir variable in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        diag_root_dir = trim(diag_output_dir)
+        if (.not.is_dir(diag_root_dir)) then
+            write(stderr,*)
+            write(stderr,*) "Error! The diag_output_dir you supplied: ", diag_root_dir, " does not exist."
+            write(stderr,*) "You need to supply an exisiting directory to the diag_output_dir variable in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (any(calc_param<0)) then
+            write(stderr,*)
+            write(stderr,*) "Error! The calc_param not set: ", calc_param
+            write(stderr,*) "You need to supply an positive calc_param in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (n_syms<1) then
+            write(stderr,*)
+            write(stderr,*) "Error! n_syms < 1: ", other_param
+            write(stderr,*) "You need to supply an positive n_syms >= 1 in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        blocks = blocks(1:n_syms)
+        n_eigs = n_eigs(1:n_syms)
+        target_energies = target_energies(1:n_syms)
+
+        write(stdout,*)
+        write(stdout,*) "Diagonalization input:"
+        write(stdout,nml=diag_input)
+
+        if (bad_input) call error_bad_input()
+    end subroutine get_diag_input
+
     subroutine write_basis_input(res_dir)
         character(len=:), allocatable, intent(in) :: res_dir
 
@@ -261,6 +335,16 @@ contains
         write(unit, nml = quasi_input)
         close(unit)
     end subroutine write_quasi_input
+
+    subroutine write_diag_input(res_dir)
+        character(len=:), allocatable, intent(in) :: res_dir
+
+        integer :: unit
+
+        open(file = res_dir // 'diag_input.dat', newunit = unit, action = 'write')
+        write(unit, nml = diag_input)
+        close(unit)
+    end subroutine write_diag_input
 
     subroutine set_basis_defaults()
         k = 6
@@ -300,6 +384,15 @@ contains
         n_relevant = 200
         allocate(relevant_blocks(n_relevant),source = -1)
     end subroutine set_quasi_defaults
+
+    subroutine set_diag_defaults()
+        basis_input_dir = "-"
+        diag_output_dir = "-"
+        n_syms = 200
+        allocate(blocks(n_syms),source = -1)
+        allocate(n_eigs(n_syms),source = -1)
+        allocate(target_energies(n_syms),source = (0.0_dp,0.0_dp))
+    end subroutine set_diag_defaults
 
     subroutine error_bad_input()
         write(stderr,*)
