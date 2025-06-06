@@ -58,10 +58,12 @@ module input_tools
     complex(dp) :: gs_energy
 
     logical :: store_vecs
+    logical :: track_proj
 
     logical :: direct_solver
 
     logical :: block_precond
+    character(len=64) :: block_precond_type
     logical :: couple_pq
     integer :: n_precond
     integer, allocatable :: precond_blocks(:), precond_blocks_in(:)
@@ -81,8 +83,10 @@ module input_tools
     & n_blocks,&
     & gs_energy,&
     & store_vecs,&
+    & track_proj,&
     & direct_solver,&
     & block_precond,&
+    & block_precond_type,&
     & couple_pq,&
     & n_precond,&
     & precond_blocks_in,&
@@ -220,7 +224,7 @@ contains
             bad_input = .true.
         end if
 
-        if (reduce_basis.and.block_precond) then
+        if (reduce_basis.and.block_precond.and.(block_precond_type == "PQ")) then
             if (n_precond > n_relevant) then
                 write(stderr,*)
                 write(stderr,*) "Error! n_precond is greater than n_relevant: ", n_precond, n_relevant
@@ -247,7 +251,7 @@ contains
             relevant_blocks = relevant_blocks(1:1)
         end if
 
-        if (block_precond) then
+        if ((block_precond).and.(block_precond_type == "PQ")) then
             precond_blocks_in = precond_blocks_in(1:n_precond)
         else
             precond_blocks_in = precond_blocks_in(1:1)
@@ -375,8 +379,10 @@ contains
         n_blocks = [1,0]
         gs_energy = (0.0_dp,0.0_dp)
         store_vecs = .false.
+        track_proj = .true.
         direct_solver = .true.
         block_precond = .false.
+        block_precond_type = "Jacobi"
         couple_pq = .false.
         n_precond = 200
         allocate(precond_blocks_in(n_precond),source = -1)

@@ -69,7 +69,7 @@ program mat_els_test
     m = 3
     Z = 2
     h_max = 0.5d0
-    r_max = 55.d0
+    r_max = 40.d0
     k_GL = splines%k + 6
     call generate_grid(k,m,Z,h_max,r_max,grid)
     call splines%init(k,grid)
@@ -92,7 +92,7 @@ program mat_els_test
     call setup_H_one_particle(pot,CAP_c,l,splines,k_GL,H)
     call setup_S(splines,k_GL,S)
 
-    gauge = 'v'
+    gauge = 'l'
     call setup_radial_dip(splines,k_GL,radial_dip,gauge)
 
     max_k = 4
@@ -235,18 +235,18 @@ program mat_els_test
     vec = 0.d0
     res = 0.d0
     confs(1)%eqv = .false.
-    confs(1)%l = 1
-    confs(2)%l = 0
+    confs(1)%l = 3
+    confs(2)%l = 2
 
     do i = 1,splines%n_b
         confs(1)%n = i
         do j = 1,splines%n_b
             confs(2)%n = j
-            vec(i) = vec(i) + vecs_v(0)%data(j,1)*dip_red_1p(confs,1,radial_dip)
+            vec(i) = vec(i) + vecs_v(2)%data(j,1)*dip_red_1p(confs,1,radial_dip)
         end do
     end do
-    vec = (-1)**1*three_j0(1,1,0)*vec
-    res = dot_product(conjg(vecs_v(1)%data(:,1)),vec)
+    vec = (-1)**1*three_j0(3,1,2)*vec
+    res = dot_product(conjg(vecs_v(3)%data(:,1)),vec)
     write(6,*) "1s->2p z dipole: ", res
 
     S = 0.d0
@@ -276,7 +276,7 @@ program mat_els_test
     ! end do
 
     call compute_R_k(r_d_k,r_k,r_m_k,max_k,splines%n_b,R_p)
-    ! allocate(R_p_map(0:max_k))
+    allocate(R_p_map(0:max_k))
     ! call compute_R_K_map(r_d_k,r_k,r_m_k,max_k,splines%n_b,R_p_map)
 
     ! res = 0.d0
@@ -352,12 +352,12 @@ program mat_els_test
 
     res = dcmplx(2.9d0,0.d0)
     ! call APX(H_diag,[res,res,res],S_diag)
-    call FEAST(H_diag%blocks(2),S_diag%blocks(2),.true.,.false.,dcmplx(-2.5d0,0.0d0),0.5d0,eigs,vecs,i)
+    call FEAST(H_diag%blocks(1),S_diag%blocks(1),.true.,.false.,dcmplx(-2.5d0,0.0d0),1.5d0,eigs,vecs,i)
     index_gs = minloc(real(eigs(:i)))
     i = index_gs(1)
     eig_gs = real(eigs(i),kind=8)
     vec_gs = vecs(:,i)
-    call FEAST(H_diag%blocks(3),S_diag%blocks(3),.true.,.false.,dcmplx(-2.05d0,0.0d0),.1d0,eigs,vecs,i)
+    call FEAST(H_diag%blocks(2),S_diag%blocks(2),.true.,.false.,dcmplx(-2.05d0,0.0d0),.1d0,eigs,vecs,i)
     index_gs = minloc(real(eigs(:i)))
     i = index_gs(1)
     vec_excited = vecs(:,i)

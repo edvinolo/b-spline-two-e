@@ -51,7 +51,7 @@ program main_quasienergies
         precond_blocks = precond_blocks_in
     end if
 
-    if (block_precond) then
+    if ((block_precond).and.(block_precond_type=='PQ')) then
         call reorder_blocks(bas,H_0_block,S_block,D)
     end if
 

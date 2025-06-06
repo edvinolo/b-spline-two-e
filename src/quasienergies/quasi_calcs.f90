@@ -8,7 +8,7 @@ module quasi_calcs
     use input_tools
     use PARDISO_tools, only: PARDISO_solver
     use ILU0_tools, only: ILU0
-    use precond_tools, only: block_PC
+    use precond_tools, only: block_PC,block_PQ_PC,block_Jacobi_PC
     use GMRES_tools, only: zFGMRES
 #if defined(WITH_FEAST)
     use eig_tools, only: drive_ARPACK_SI, FEAST
@@ -36,7 +36,7 @@ module quasi_calcs
     type(zFGMRES) :: GMRES
 
     ! block_PC object for preconditioning GMRES
-    type(block_PC) :: precond
+    class(block_PC), allocatable :: precond
 
     ! ILU0 object for test
     ! type(ILU0) :: PC_ILU0
@@ -76,6 +76,7 @@ contains
         intensity = other_param
 
         call allocate_result(bas)
+        if (track_proj) call allocate_temp_results()
 
         call S_block%to_CS(S,.false.)
 
@@ -83,6 +84,7 @@ contains
             call print_params(i,intensity,omega(i),shift)
             V_0 = field_strength(intensity,omega(i))
             call compute_quasi(H_0,S_block,D,bas,i,V_0,omega(i),shift,n_quasi,eigs(:,i),vecs(:,:,i))
+            if ((track_proj).and.(i>1)) call reorder_proj(i)
         end do
 
         call cleanup_solvers()
@@ -112,6 +114,7 @@ contains
         omega = other_param
 
         call allocate_result(bas)
+        if (track_proj) call allocate_temp_results()
 
         call S_block%to_CS(S,.false.)
 
@@ -119,6 +122,7 @@ contains
             call print_params(i,intensity(i),omega,shift)
             V_0 = field_strength(intensity(i),omega)
             call compute_quasi(H_0,S_block,D,bas,i,V_0,omega,shift,n_quasi,eigs(:,i),vecs(:,:,i))
+            if ((track_proj).and.(i>1)) call reorder_proj(i)
         end do
 
         call cleanup_solvers()
@@ -247,7 +251,16 @@ contains
 
         if (block_precond) then
             if (i == 1) then
-                call precond%setup(n_precond,bas%n_sym-n_precond,H_block,couple_pq)
+                if (block_precond_type == 'PQ') then
+                    allocate(block_PQ_PC :: precond)
+                else if (block_precond_type == 'Jacobi') then
+                    allocate(block_Jacobi_PC :: precond)
+                else
+                    write(stderr,*) ""
+                    write(stderr,'(a,a)') "Error in Block_PC setup, unknown block_precond_type: ", block_precond_type
+                    error stop
+                end if
+                call precond%setup(H_block)
             else
                 call precond%update(H_block)
             end if
@@ -277,7 +290,7 @@ contains
                 call drive_ARPACK_SI(GMRES,precond,S,full,shift_i,n_eigs_out,eigs_out(:),vecs_out(:,:))
             end if
         end if
-        ! call FEAST(H,S,.true.,full,(0.0_dp,0.0_dp),0.1_dp,eigs_i,vecs_i,N_eig)
+
     end subroutine compute_quasi
 
     subroutine cleanup_solvers()
@@ -537,7 +550,7 @@ contains
         complex(dp), allocatable :: temp(:)
 
         max_i = -1
-        max_proj = -1_dp
+        max_proj = -1.0_dp
         n = size(eigs_i)
 
         allocate(temp(size(vec)))
@@ -549,7 +562,7 @@ contains
         end if
 
         do i = 1,n
-            proj = abs(zdotu(size(vec),vecs_i(:,i),1,temp,1))
+            proj = abs(zdotu(n_states,vecs_i(:,i),1,temp,1))
             write(stdout,'(a,es11.4,es11.4,a,es11.4)') 'Eig: ', real(eigs_i(i),kind=dp),aimag(eigs_i(i)), ', proj: ', proj
             if (proj > max_proj) then
                 max_i = i
@@ -559,6 +572,56 @@ contains
 
         res = max_i
     end function find_max_proj
+
+    subroutine reorder_proj(i)
+        integer, intent(in) :: i
+
+        integer :: j,kk,max
+        real(dp) :: proj,max_proj
+        complex(dp), allocatable :: temp(:)
+        logical :: free(n_quasi)
+
+        free = .true.
+        allocate(temp(n_states))
+
+        do j=1,n_quasi
+            if (full) then
+                call CSR_mv(S,vecs(:,j,i),temp)
+            else
+                call CSR_mv_sym(S,vecs(:,j,i),temp)
+            end if
+
+            max_proj = -1.0_dp
+            max = -1
+            do kk=1,n_quasi
+                proj = abs(zdotu(n_states,vecs(:,kk,i-1),1,temp,1))
+                if (proj > max_proj) then
+                    max = kk
+                    max_proj = proj
+                end if
+            end do
+
+            if (free(max)) then
+                free(max) = .false.
+                vecs_i(:,max) = vecs(:,j,i)
+                eigs_i(max) = eigs(j,i)
+            else
+                free(j) = .false. ! Don't move it if already found vector that wants the max slot (TODO: choose the one with largest projection to go in max slot)
+                vecs_i(:,j) = vecs(:,j,i)
+                eigs_i(j) = eigs(j,i)
+            end if
+        end do
+
+        vecs(:,:,i) = vecs_i
+        eigs(:,i) = eigs_i
+
+        write(stdout,*) ''
+        write(stdout,*) 'Reordered eigenvalues:'
+        do j=1,n_quasi
+            write(stdout,*) eigs(j,i)
+        end do
+        write(stdout,*) ''
+    end subroutine reorder_proj
 
     subroutine start_timer()
         t_1_quasi = omp_get_wtime()

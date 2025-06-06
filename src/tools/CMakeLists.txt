@@ -9,6 +9,7 @@ set(tool_files
     "grid_tools.f90"
     "ILU0_tools.f90"
     "input_tools.f90"
+    "Jacobi_tools.f90"
     "kind_tools.f90"
     "orbital_tools.f90"
     "PARDISO_tools.f90"

@@ -2,8 +2,8 @@ module GMRES_tools
     use kind_tools
     use constants_tools, only: i_
     use iso_fortran_env, only: stdout => output_unit, stderr => error_unit
-    use sparse_array_tools, only: CSR_dsymv
-    use precond_tools
+    use sparse_array_tools, only: CSR_matrix,CSR_dsymv
+    use precond_tools, only: block_PC,block_PQ_PC,block_Jacobi_PC
     use omp_lib, only: omp_get_wtime
     implicit none
 
@@ -224,22 +224,20 @@ module GMRES_tools
             class(zFGMRES), intent(inout) :: this
             complex(dp), intent(out) :: x(:)
             complex(dp), intent(in) :: b(:)
-            type(block_PC), intent(inout) :: precond
+            class(block_PC), intent(inout) :: precond
 
             integer :: ido,x_1,x_2,y_1,y_2,i,itercount
             ! real(dp) :: t_1,t_2
 
-            call precond%solve(x,b)
             !$omp parallel do
             do i = 1,this%n
                 this%b_work(i) = real(b(i),kind=dp)
                 this%b_work(this%n+i) = aimag(b(i))
-                this%x_work(i) = real(x(i),kind=dp)
-                this%x_work(this%n+i) = aimag(x(i))
+                this%x_work(i) = real(b(i),kind=dp)
+                this%x_work(this%n+i) = aimag(b(i))
             end do
             !$omp end parallel do
 
-            ! this%x_work = this%b_work
             call dfgmres_init(2*this%n,this%x_work,this%b_work,ido,this%ipar,this%dpar,this%tmp)
             if (ido /= 0) then
                 write(stderr,*) "Error! dfgmres_init exited with RCI_request: ", ido

@@ -6,7 +6,7 @@ module eig_tools
     use stdlib_sorting, only: sort_index
     use iso_fortran_env, only: stdout => output_unit, stderr => error_unit
     use PARDISO_tools, only: PARDISO_solver
-    use precond_tools, only: block_PC
+    use precond_tools, only: block_PC,block_PQ_PC,block_Jacobi_PC
     use GMRES_tools, only: zFGMRES
     use omp_lib, only: omp_get_wtime
     implicit none
@@ -137,7 +137,7 @@ contains
     end subroutine sort_eig
 
 #if defined(WITH_FEAST)
-    subroutine FEAST(A,B,sym,full,mid,rad,eigs,vecs,M)
+    subroutine FEAST(A,B,sym,full,mid,rad,eigs,vecs,M,max_tries)
         type(CSR_matrix), intent(inout) :: A
         type(CSR_matrix), intent(inout) :: B
         logical, intent(in) :: sym
@@ -147,15 +147,22 @@ contains
         double complex, dimension(:), allocatable, intent(inout) :: eigs
         double complex, dimension(:,:), allocatable, intent(inout) :: vecs
         integer, intent(out) :: M
+        integer, optional :: max_tries
 
         double precision :: t_1,t_2
         double precision :: epsout
-        integer :: M_0,loop,info,i
+        integer :: M_0,loop,info,i,max
         double precision, dimension(:), allocatable :: res
         integer, dimension(64) :: fpm
         character :: uplo
 
         double complex, dimension(:), allocatable :: temp_V
+
+        if (present(max_tries)) then
+            max = max_tries
+        else
+            max = 3
+        end if
 
         if (full) then
             uplo = 'F'
@@ -164,19 +171,15 @@ contains
         end if
 
         call feastinit(fpm)
-        fpm(1) = 1
-        write(6,*) fpm(42)
-        if (fpm(42)==1)then
-            stop
-        end if
-        !fpm(42) = 0
+        fpm(1) = 1 ! Feast prints info to screen
+        fpm(14) = 2 ! Feast does a stochastic estimate of the number of enclosed eigenvalues
 
-        M_0 = 10
+        M_0 = 5
         if (allocated(eigs)) deallocate(eigs)
         if (allocated(vecs)) deallocate(vecs)
         allocate(res(M_0),eigs(M_0),vecs(A%shape(1),M_0))
 
-        write(6,*) "Finding eigenvalues using FEAST"
+        write(stdout,*) "Estimating number of eigenvalues using FEAST"
         t_1 = omp_get_wtime()
         if (sym) then
             call zfeast_scsrgv(uplo,A%shape(1),A%data,A%index_ptr,A%indices,B%data,B%index_ptr,B%indices &
@@ -186,10 +189,42 @@ contains
                                ,fpm,epsout,loop,mid,rad,M_0,eigs,vecs,M,res,info)
         end if
         t_2 = omp_get_wtime()
-        write(6,*) "Time for FEAST (s): ", t_2-t_1
+        write(stdout,*) "Time for FEAST eigenvalue estimation (s): ", t_2-t_1
+
+        M_0 = int(M*1.5_dp)
+        write(stdout,'(a,i0)')  'FEAST estimate for # of enclosed eigenvalues:', M
+
+        write(stdout,*) "Finding eigenvalues using FEAST"
+        t_1 = omp_get_wtime()
+        i = 0
+        do while (i <= max)
+            call feastinit(fpm)
+            fpm(1) = 1 ! Feast prints info to screen
+            deallocate(res,eigs,vecs)
+            allocate(res(M_0),eigs(M_0),vecs(A%shape(1),M_0))
+            if (sym) then
+                call zfeast_scsrgv(uplo,A%shape(1),A%data,A%index_ptr,A%indices,B%data,B%index_ptr,B%indices &
+                                ,fpm,epsout,loop,mid,rad,M_0,eigs,vecs,M,res,info)
+            else
+                call zfeast_gcsrgv(A%shape(1),A%data,A%index_ptr,A%indices,B%data,B%index_ptr,B%indices &
+                                ,fpm,epsout,loop,mid,rad,M_0,eigs,vecs,M,res,info)
+            end if
+
+            if (info == 3) then
+                i = i + 1
+                M_0 = int(M_0*1.5_dp)
+                write(stdout,'(a)') 'FEAST exited with info code 3 (work subspace too small)'
+                write(stdout,'(a,i0)') 'Increasing M_0 and retrying. New M_0: ', M_0
+            else
+                exit
+            end if
+
+        end do
+        t_2 = omp_get_wtime()
+        write(stdout,*) "Time for FEAST (s): ", t_2-t_1
 
         do i = 1,M
-            write(6,*) eigs(i)
+            write(stdout,*) eigs(i)
         end do
 
         allocate(temp_v(B%shape(1)))
@@ -333,7 +368,7 @@ contains
 
     subroutine drive_ARPACK_precond(A,precond,B,full,shift,n_eigs,eigs,vecs,v0,max_iter,tol)
         type(CSR_matrix), intent(in) :: A
-        type(block_PC), intent(inout) :: precond
+        class(block_PC), intent(inout) :: precond
         type(CSR_matrix), intent(in) :: B
         logical, intent(in) :: full
         complex(dp), intent(in) :: shift
@@ -455,7 +490,7 @@ contains
 
     subroutine drive_ARPACK_GMRES(GMRES,precond,B,full,shift,n_eigs,eigs,vecs,v0,max_iter,tol)
         type(zFGMRES), intent(inout) :: GMRES
-        type(block_PC), intent(inout) :: precond
+        class(block_PC), intent(inout) :: precond
         type(CSR_matrix), intent(in) :: B
         logical, intent(in) :: full
         complex(dp), intent(in) :: shift
