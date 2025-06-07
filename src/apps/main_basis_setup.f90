@@ -19,7 +19,7 @@ program main_basis_setup
 
     double precision, dimension(:), allocatable :: grid
     type(b_spline) :: splines
-    integer :: max_n_b_2
+    integer :: max_n_b_2, n_all_l
     double complex, dimension(:,:), allocatable :: S
     type(radial_dipole) :: radial_dip
     type(sparse_4d) :: r_k,r_m_k
@@ -58,7 +58,15 @@ program main_basis_setup
     if (r_2_max > 0) then
         max_n_b_2 = splines%find_max_n_b(r_2_max)
     else
-        max_n_b_2=splines%n_b
+        max_n_b_2 = splines%n_b
+    end if
+
+    ! Limit the angular momentum of the second electron to max_l2 when the first is beyond r_all_l
+    ! It is not used if r_all_l <= 0.
+    if (r_all_l > 0) then
+        n_all_l = splines%find_max_n_b(r_all_l)
+    else
+        n_all_l = splines%n_b
     end if
 
     call CAP_c%init(CAP_order,CAP_r_0,CAP_eta)
@@ -90,7 +98,7 @@ program main_basis_setup
         call setup_H_one_particle(pot,CAP_c,i,splines,k_GL,H_vec(i)%data)
     end do
 
-    call bas%init(max_L,max_l_1p,splines%n_b,max_n_b_2,z_pol,eigs_v)
+    call bas%init(max_L,max_l_1p,splines%n_b,splines%k,max_n_b_2,n_all_l,max_l2,z_pol,eigs_v)
 
     call H_diag%init(bas%n_sym)
     call S_diag%init(bas%n_sym)

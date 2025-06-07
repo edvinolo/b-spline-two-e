@@ -8,8 +8,8 @@ module input_tools
     character(len=:), allocatable :: basis_root_dir
     character(len=64) :: basis_output_dir
 
-    integer :: k,m,Z,max_k,k_GL,max_L,max_l_1p
-    double precision :: h_max,r_max,r_2_max
+    integer :: k,m,Z,max_k,k_GL,max_L,max_l_1p,max_l2
+    double precision :: h_max,r_max,r_2_max,r_all_l
 
     integer :: CAP_order
     double precision :: CAP_r_0
@@ -27,12 +27,14 @@ module input_tools
     & h_max,&
     & r_max,&
     & r_2_max,&
+    & r_all_l,&
     & k_GL,&
     & CAP_order,&
     & CAP_r_0,&
     & CAP_eta,&
     & max_L,&
     & max_l_1p,&
+    & max_l2,&
     & max_k,&
     & gauge,&
     & z_pol,&
@@ -160,6 +162,46 @@ contains
             write(stderr,*)
             write(stderr,*) "Bad gauge input parameter: ", gauge
             write(stderr,*) "Must be l (length) or v (velocity)"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (r_2_max > r_max) then
+            write(stderr,*)
+            write(stderr,*) "Error! r_2_max > r_max: ", r_2_max, r_max
+            write(stderr,*) "You need to supply r_2_max < r_max in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (r_all_l > r_max) then
+            write(stderr,*)
+            write(stderr,*) "Error! r_all_l > r_max: ", r_all_l, r_max
+            write(stderr,*) "You need to supply r_all_l < r_max in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if ((r_2_max > 0).and.(r_2_max >= r_all_l)) then
+            write(stderr,*)
+            write(stderr,*) "Error! r_2_max >= r_all_l: ", r_2_max, r_all_l
+            write(stderr,*) "You need to supply r_2_max < r_all_l in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if ((r_2_max <= 0).and.(r_all_l > 0)) then
+            write(stderr,*)
+            write(stderr,*) "Error! r_2_max <= 0 while r_all_l > 0: ", r_2_max, r_all_l
+            write(stderr,*) "You need to supply r_2_max < 0 and r_all_l < 0, or 0 < r_2_max < r_all_l in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if ((max_l2 > max_l_1p)) then
+            write(stderr,*)
+            write(stderr,*) "Error! max_l2 > max_l_1p: ", max_l2, max_l_1p
+            write(stderr,*) "You need to supply max_l2 < max_l_1p in the input file"
             write(stderr,*)
             bad_input = .true.
         end if
@@ -356,13 +398,15 @@ contains
         Z = 2
         h_max = 0.5_dp
         r_max = 15.0_dp
-        r_2_max = -1_dp
+        r_2_max = -1.0_dp
+        r_all_l = -1.0_dp
         k_GL = k + 6
         CAP_order = 2
         CAP_r_0 = 10.0_dp
         CAP_eta = dcmplx(1.d-3,0.d0)
         max_L = 2
         max_l_1p = 5
+        max_l2 = 5
         max_k = 4
         z_pol = .true.
         full = .true.

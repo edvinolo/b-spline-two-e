@@ -108,11 +108,14 @@ contains
         res = .true.
     end function dip_allowed
 
-    pure function count_configs(term,max_l_1p,n_b,max_n_b,eigs) result(res)
+    pure function count_configs(term,max_l_1p,n_b,k_spline,max_n_b,n_all_l,l_2_max,eigs) result(res)
         type(sym), intent(in) :: term
         integer, intent(in) :: max_l_1p
         integer, intent(in) :: n_b
+        integer, intent(in) :: k_spline
         integer, intent(in) :: max_n_b
+        integer, intent(in) :: n_all_l
+        integer, intent(in) :: l_2_max
         double complex, dimension(:,:), allocatable, intent(in) :: eigs
         type(config), dimension(:), allocatable :: res
 
@@ -134,9 +137,10 @@ contains
                 ! if (j+term%l > max_l_1p+1) cycle !Limit the angular momentum of second electron
                 orbs(2)%l = j
                 orbs(2)%pi = (mod(j,2)/=0)
-                do n_i = 1,n_b
+                do n_i = min(i+1,k_spline-1),n_b
+                    if ((n_i>n_all_l).and.(j>l_2_max)) cycle !limit angular momentum of second electron when the other is far away
                     if (j==i) then
-                        do n_j = 1,min(n_i,max_n_b)
+                        do n_j = min(j+1,k_spline-1),min(n_i,max_n_b)
                             eqv = (i==j).and.(n_i==n_j)
                             energy_1p = eigs(n_i,i) + eigs(n_j,j)
                             if (consistent(orbs,term,eqv)) then!.and.(real(energy_1p)<1.5d1)) then
@@ -148,7 +152,7 @@ contains
                             end if
                         end do
                     else
-                        do n_j = 1,min(n_b,max_n_b)
+                        do n_j = min(j+1,k_spline-1),min(n_b,max_n_b)
                             eqv = (i==j).and.(n_i==n_j)
                             energy_1p = eigs(n_i,i) + eigs(n_j,j)
                             if (consistent(orbs,term,eqv)) then!.and.(real(energy_1p)<1.5d1)) then
@@ -181,12 +185,15 @@ contains
         end if
     end function count_terms
 
-    pure subroutine init_basis(this,max_L,max_l_1p,n_b,max_n_b,z_pol,eigs)
+    pure subroutine init_basis(this,max_L,max_l_1p,n_b,k_spline,max_n_b,n_all_l,l_2_max,z_pol,eigs)
         class(basis), intent(inout) :: this
         integer, intent(in) ::  max_L
         integer, intent(in) :: max_l_1p
         integer, intent(in) :: n_b
+        integer, intent(in) :: k_spline
         integer, intent(in) :: max_n_b
+        integer, intent(in) :: n_all_l
+        integer, intent(in) :: l_2_max
         logical, intent(in) :: z_pol
         double complex, dimension(:,:), allocatable, intent(in) :: eigs
 
@@ -198,7 +205,7 @@ contains
         this%syms(1)%l = 0
         this%syms(1)%m = 0
         this%syms(1)%pi = .false.
-        this%syms(1)%configs = count_configs(this%syms(1),max_l_1p,n_b,max_n_b,eigs)
+        this%syms(1)%configs = count_configs(this%syms(1),max_l_1p,n_b,k_spline,max_n_b,n_all_l,l_2_max,eigs)
         this%syms(1)%n_config = size(this%syms(1)%configs)
 
         ptr = 2
@@ -209,7 +216,8 @@ contains
                 this%syms(ptr)%m = 0
                 this%syms(ptr)%pi = (mod(l,2)/=0)
                 !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
-                this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,max_n_b,eigs)
+                this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,k_spline,&
+                                                        max_n_b,n_all_l,l_2_max,eigs)
                 this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
                 ptr = ptr + 1
             end do
@@ -224,7 +232,8 @@ contains
                         this%syms(ptr)%m = m
                         this%syms(ptr)%pi = par
                         !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
-                        this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,max_n_b,eigs)
+                        this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,k_spline,&
+                                                                max_n_b,n_all_l,l_2_max,eigs)
                         this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
                         ptr = ptr + 1
                     end do

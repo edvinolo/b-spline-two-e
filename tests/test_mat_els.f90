@@ -49,7 +49,8 @@ program mat_els_test
     character :: gauge
     logical :: compute
     double precision :: r_2_max = -1.d0
-    integer :: max_n_b
+    double precision :: r_all_l = -1.d0
+    integer :: max_n_b,n_all_l,l_2_max
     double precision :: eig_gs,eig_excited
 
     !for ploting orbitals
@@ -311,7 +312,15 @@ program mat_els_test
         max_n_b = splines%find_max_n_b(r_2_max)
     end if
 
-    call bas%init(2,2,splines%n_b,max_n_b,.true.,eigs_v)
+    r_all_l = 25.d0
+    if (r_all_l < 0) then
+        n_all_l = splines%n_b
+    else
+        n_all_l = splines%find_max_n_b(r_all_l)
+    end if
+    l_2_max = 1
+
+    call bas%init(2,2,splines%n_b,splines%k,max_n_b,n_all_l,l_2_max,.true.,eigs_v)
     ! call H_block%init(bas%syms(2)%n_config,bas%syms(2)%n_config,.true.)
     ! call S_block%init(bas%syms(2)%n_config,bas%syms(2)%n_config,.true.)
     write(6,*) bas%syms(1)%l,bas%syms(1)%m,bas%syms(1)%pi,bas%syms(1)%n_config
@@ -352,12 +361,12 @@ program mat_els_test
 
     res = dcmplx(2.9d0,0.d0)
     ! call APX(H_diag,[res,res,res],S_diag)
-    call FEAST(H_diag%blocks(1),S_diag%blocks(1),.true.,.false.,dcmplx(-2.5d0,0.0d0),1.5d0,eigs,vecs,i)
+    call FEAST(H_diag%blocks(2),S_diag%blocks(2),.true.,.false.,dcmplx(-2.5d0,0.0d0),0.5d0,eigs,vecs,i)
     index_gs = minloc(real(eigs(:i)))
     i = index_gs(1)
     eig_gs = real(eigs(i),kind=8)
     vec_gs = vecs(:,i)
-    call FEAST(H_diag%blocks(2),S_diag%blocks(2),.true.,.false.,dcmplx(-2.05d0,0.0d0),.1d0,eigs,vecs,i)
+    call FEAST(H_diag%blocks(3),S_diag%blocks(3),.true.,.false.,dcmplx(-2.05d0,0.0d0),.1d0,eigs,vecs,i)
     index_gs = minloc(real(eigs(:i)))
     i = index_gs(1)
     vec_excited = vecs(:,i)
@@ -439,7 +448,7 @@ program mat_els_test
     syms(1) = bas%syms(2)
     syms(2) = bas%syms(3)
     ! syms%m = [0,1]
-    call construct_dip_block_tensor(syms,-1,splines,S,radial_dip,dip_block_spr,.true.)
+    call construct_dip_block_tensor(syms,0,splines,S,radial_dip,dip_block_spr,.true.)
     ! call construct_dip_block_dense(syms,0,S,radial_dip,dip_block)
 
     allocate(vec_dip(size(vec_gs)),temp_vec(size(vec_gs)))
