@@ -22,7 +22,7 @@ module quasi_calcs
 
     ! Misc. integer variables
     integer :: n_states
-    integer, parameter :: n_temp = 2 ! How many eigs to find when doing follow calcs
+    integer :: n_temp ! How many eigs to find when doing follow calcs
 
     ! Hamiltonian
     type(CSR_matrix) :: H
@@ -327,6 +327,11 @@ contains
     end subroutine allocate_result
 
     subroutine allocate_temp_results()
+        if ((calc_type == 'omega_follow').or.(calc_type == 'intensity_follow')) then
+            n_temp = 2
+        else
+            n_temp = n_quasi
+        end if
         allocate(eigs_i(n_temp),vecs_i(n_states,n_temp))
     end subroutine allocate_temp_results
 
@@ -504,7 +509,7 @@ contains
         bas%n_sym = n_relevant
         bas%syms = bas%syms(relevant_blocks)
 
-        if (block_precond) then
+        if (block_precond.and.(block_precond_type == 'PQ')) then
             allocate(precond_blocks(n_precond))
             ptr = 1
             do i = 1,n_relevant
