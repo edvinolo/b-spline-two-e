@@ -24,12 +24,12 @@ contains
         double precision :: retval
 
         integer(c_int) :: two_ja,two_jb,two_jc,two_ma,two_mb,two_mc
-        two_ja = 2*j_a
-        two_jb = 2*j_b
-        two_jc = 2*j_c
-        two_ma = 2*m_a
-        two_mb = 2*m_b
-        two_mc = 2*m_c
+        two_ja = int(2*j_a,kind=c_int)
+        two_jb = int(2*j_b,kind=c_int)
+        two_jc = int(2*j_c,kind=c_int)
+        two_ma = int(2*m_a,kind=c_int)
+        two_mb = int(2*m_b,kind=c_int)
+        two_mc = int(2*m_c,kind=c_int)
 
         retval = gsl_sf_coupling_3j(two_ja,two_jb,two_jc,two_ma,two_mb,two_mc)
     end function three_j
@@ -40,12 +40,12 @@ contains
         double precision :: retval
 
         integer(c_int) :: two_ja,two_jb,two_jc,two_jd,two_je,two_jf
-        two_ja = 2*j_a
-        two_jb = 2*j_b
-        two_jc = 2*j_c
-        two_jd = 2*j_d
-        two_je = 2*j_e
-        two_jf = 2*j_f
+        two_ja = int(2*j_a,kind=c_int)
+        two_jb = int(2*j_b,kind=c_int)
+        two_jc = int(2*j_c,kind=c_int)
+        two_jd = int(2*j_d,kind=c_int)
+        two_je = int(2*j_e,kind=c_int)
+        two_jf = int(2*j_f,kind=c_int)
 
         retval = gsl_sf_coupling_6j(two_ja,two_jb,two_jc,two_jd,two_je,two_jf)
     end function six_j
