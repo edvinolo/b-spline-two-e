@@ -110,7 +110,7 @@ program main_basis_setup
     call H_diag%compute_shape()
     call S_diag%compute_shape()
 
-    deallocate(R_p)
+    ! deallocate(R_p)
 
     ! Compute dipole matrix elements
     write(6,*)
