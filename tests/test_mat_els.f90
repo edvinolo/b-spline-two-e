@@ -39,7 +39,8 @@ program mat_els_test
     type(config),dimension(2) :: confs
     type(sym), dimension(2) :: syms
     double precision, dimension(:,:,:,:,:),allocatable :: R_p
-    type(Nd_DOK), allocatable :: R_p_map(:)
+    ! type(Nd_DOK), allocatable :: R_p_map(:)
+    type(Nd_DOK) :: R_p_map
     double complex :: res
     integer, dimension(2) :: nnz
     type(CSC_matrix) H_spc,S_spc
@@ -70,7 +71,7 @@ program mat_els_test
     m = 3
     Z = 2
     h_max = 0.5d0
-    r_max = 40.d0
+    r_max = 30.d0
     k_GL = splines%k + 6
     call generate_grid(k,m,Z,h_max,r_max,grid)
     call splines%init(k,grid)
@@ -277,8 +278,8 @@ program mat_els_test
     ! end do
 
     call compute_R_k(r_d_k,r_k,r_m_k,max_k,splines%n_b,R_p)
-    allocate(R_p_map(0:max_k))
-    ! call compute_R_K_map(r_d_k,r_k,r_m_k,max_k,splines%n_b,R_p_map)
+    ! allocate(R_p_map(0:max_k))
+    call compute_R_K_map(r_d_k,r_k,r_m_k,splines,max_k,R_p_map)
 
     ! res = 0.d0
     ! do j_b_p = 1,splines%n_b
@@ -293,7 +294,7 @@ program mat_els_test
     ! end do
     ! write(6,*) res
 
-    res = c_mat_neq_tens(0,confs,splines%n_b,splines%n_b-2,splines%n_b,splines%n_b-1,max_k,Rk,0,R_p)
+    res = c_mat_neq_tens(0,confs,splines%n_b,splines%n_b-2,splines%n_b,splines%n_b-1,max_k,R_p_map,.true.,.true.)
     write(6,*) res
     confs(1)%eqv = .false.
     confs(1)%l = [0,0]
@@ -301,7 +302,7 @@ program mat_els_test
     confs(2)%eqv = .false.
     confs(2)%l = [0,0]
     confs(2)%n = [splines%n_b,splines%n_b-2]
-    res = c_mat_neq_tens(0,confs,splines%n_b,splines%n_b-1,splines%n_b,splines%n_b-2,max_k,Rk,0,R_p)
+    res = c_mat_neq_tens(0,confs,splines%n_b,splines%n_b-1,splines%n_b,splines%n_b-2,max_k,R_p_map,.true.,.true.)
     write(6,*) res
     !stop
 
@@ -335,7 +336,7 @@ program mat_els_test
     call S_diag%init(bas%n_sym)
     !$omp parallel do
     do i = 1,bas%n_sym
-        call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,Rk,R_p,H_diag%blocks(i),S_diag%blocks(i),.false.)
+        call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,R_p_map,H_diag%blocks(i),S_diag%blocks(i),.false.)
     end do
     !$omp end parallel do
     call H_diag%compute_shape()

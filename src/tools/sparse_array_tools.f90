@@ -2,7 +2,8 @@ module sparse_array_tools
     use kind_tools
     use bspline_tools
     use stdlib_sorting, only: sort_index
-    use stdlib_hashmaps, only: chaining_hashmap_type
+    use stdlib_hashmaps, only: open_hashmap_type
+    use omp_lib, only: omp_get_wtime
     implicit none
 
     type, public :: sparse_4d
@@ -41,15 +42,18 @@ module sparse_array_tools
         procedure :: count_nnz => count_nnz_Slater
     end type sparse_Slater
 
-    type, public :: val_type
-        double precision :: val
-    end type val_type
+    type, public :: ptr_type
+        integer :: ptr
+    end type ptr_type
 
     type, public :: Nd_DOK
         integer :: N
         integer :: N_val
-        type(chaining_hashmap_type) :: map
-        class(*), allocatable :: temp_val
+        integer :: N_elements
+        type(ptr_type) :: entry
+        type(open_hashmap_type) :: map
+        real(dp), allocatable :: data(:)
+        class(*), allocatable :: ptr
         integer(int8), allocatable :: indices(:)
     contains
         procedure :: init => init_Nd_DOK
@@ -341,6 +345,27 @@ contains
         end do
     end subroutine count_nnz_Slater
 
+    pure function count_nnz_R_k(b_splines) result(res)
+        type(b_spline), intent(in) :: b_splines
+        integer :: res
+
+        integer :: i,j,i_p,j_p
+
+        res = 0
+
+        do j_p = 1, b_splines%n_b
+            do j = 1, b_splines%n_b
+                if (abs(j-j_p)>=b_splines%k) cycle
+                do i_p = 1, b_splines%n_b
+                    do i = 1,b_splines%n_b
+                        if (abs(i-i_p) >= b_splines%k) cycle
+                        res = res + 1
+                    end do
+                end do
+            end do
+        end do
+    end function count_nnz_R_k
+
     function permute_6d(A) result(res)
         type(sparse_6d), intent(in) :: A
         type(sparse_6d) :: res
@@ -406,6 +431,7 @@ contains
             end do
         end do
         write(6,*) 'Done!'
+        ! write(6,*) R(:,8,9,10,11)
 
         ! nnz = 0
         ! do i = 1,n_b
@@ -424,82 +450,88 @@ contains
 
     end subroutine compute_R_k
 
-    subroutine compute_R_K_map(r_d_k,r_k,r_m_k,max_k,n_b,R)
+    subroutine compute_R_K_map(r_d_k,r_k,r_m_k,b_splines,max_k,R)
         type(sparse_6d), intent(in) :: r_d_k
         type(sparse_4d), intent(in) :: r_k
         type(sparse_4d), intent(in) :: r_m_k
+        type(b_spline), intent(in) :: b_splines
         integer, intent(in) :: max_k
-        integer, intent(in) :: n_b
-        type(Nd_DOK), intent(inout) :: R(0:max_k)
+        type(Nd_DOK), intent(inout) :: R
 
-        integer :: n,m,k
-        double precision :: val
+        integer :: n,m,nnz
+        double precision, allocatable :: val(:)
+        double precision :: t1,t2
 
         write(6,*)
         write(6,*) 'Constructing R_K DOK array...'
-        ! call R%init(4,max_k+1) !Four indices, and max_k+1 values
-        do k = 0,max_k
-            call R(k)%init(4,max_k+1)
-            do n=1,r_k%nnz
-                do m=1,r_k%nnz
-                    if (r_k%iv(n)<r_k%iv(m)) then
-                        val = r_k%data(n,k)*r_m_k%data(m,k)
-                    else if (r_k%iv(n)>r_k%iv(m)) then
-                        val = r_k%data(m,k)*r_m_k%data(n,k)
-                    end if
-                    call R(k)%set_val([r_k%i(n),r_k%i(m),r_k%j(n),r_k%j(m)],val)
-                end do
-            end do
+        t1 = omp_get_wtime()
 
-            do n=1,r_d_k%nnz
-                val = r_d_k%data(n,k)
-                call R(k)%set_val([r_d_k%i(n),r_d_k%j(n),r_d_k%i_p(n),r_d_k%j_p(n)],val)
-                call R(k)%set_val([r_d_k%j(n),r_d_k%i(n),r_d_k%j_p(n),r_d_k%i_p(n)],val)
+        allocate(val(0:max_k))
+        nnz = count_nnz_R_k(b_splines)
+        call R%init(4,max_k+1,nnz) !Four indices, and max_k+1 values
+
+        do n=1,r_k%nnz
+            do m=1,r_k%nnz
+                if (r_k%iv(n)<r_k%iv(m)) then
+                    val = r_k%data(n,:)*r_m_k%data(m,:)
+                    call R%set_val([r_k%i(n),r_k%i(m),r_k%j(n),r_k%j(m)],val)
+                else if (r_k%iv(n)>r_k%iv(m)) then
+                    val = r_k%data(m,:)*r_m_k%data(n,:)
+                    call R%set_val([r_k%i(n),r_k%i(m),r_k%j(n),r_k%j(m)],val)
+                end if
             end do
         end do
-        write(6,*) 'Done!'
+
+        do n=1,r_d_k%nnz
+            val = r_d_k%data(n,:)
+            call R%set_val([r_d_k%i(n),r_d_k%j(n),r_d_k%i_p(n),r_d_k%j_p(n)],val)
+            call R%set_val([r_d_k%j(n),r_d_k%i(n),r_d_k%j_p(n),r_d_k%i_p(n)],val)
+        end do
+        t2 = omp_get_wtime()
+        write(6,*) 'Done!, Time for construction (s): ', t2-t1
+        ! call R%get_val([8,9,10,11],val)
+        ! write(6,*) val
     end subroutine compute_R_K_map
 
-    subroutine init_Nd_DOK(this,N,N_val)
+    subroutine init_Nd_DOK(this,N,N_val,nnz)
         class(Nd_DOK), intent(out) :: this
         integer, intent(in) :: N
         integer, intent(in) :: N_val
+        integer, intent(in) :: nnz
 
         call this%map%init()
         this%N = N
         this%N_val = N_val
-        !allocate(this%val%val(N_val))
+        this%N_elements = nnz
+        this%entry%ptr = 1
+        allocate(this%data(N_val*this%N_elements))
     end subroutine init_Nd_DOK
 
     subroutine set_val_Nd_DOK(this,indices,val)
         class(Nd_DOK), intent(inout) :: this
         integer, intent(in) :: indices(this%N)
-        double precision, target, intent(in) :: val
+        real(dp), intent(in) :: val(:)
 
         logical(int32) :: exists
-        type(val_type), target, allocatable :: val_entry
-        type(val_type), pointer :: val_ptr
+        integer :: entry
 
         this%indices = transfer(indices,[0_int8])
 
         call this%map%key_test(this%indices,exists)
 
-        associate (temp_val => this%temp_val)
+        associate (temp => this%ptr)
         if (exists) then
-            call this%map%get_other_data(this%indices,temp_val)
-            select type (temp_val)
-            type is (val_type)
-                temp_val%val = temp_val%val + val
-                ! write(6,*) temp_val%val
-                call this%map%set_other_data(this%indices,temp_val)
+            call this%map%get_other_data(this%indices,temp)
+            select type (temp)
+            type is (ptr_type)
+                this%data(temp%ptr:temp%ptr+this%N_val-1) = this%data(temp%ptr:temp%ptr+this%N_val-1) + val
             class default
-                error stop "Wrong dynamic type of temp_val!"
+                error stop "Wrong dynamic type of ptr!"
             end select
         else
-            allocate(val_entry)
-            val_entry%val = val
-            val_ptr => val_entry
-            call this%map%map_entry(this%indices,val_ptr)
+            this%data(this%entry%ptr:this%entry%ptr+this%N_val-1) = val
+            call this%map%map_entry(this%indices,this%entry)
+            this%entry%ptr = this%entry%ptr + this%N_val
         end if
         end associate
 
@@ -508,19 +540,20 @@ contains
     subroutine get_val_Nd_DOK(this,indices,values)
         class(Nd_DOK), intent(inout) :: this
         integer, intent(in) :: indices(this%N)
-        double precision, intent(out) :: values
+        real(dp), intent(out) :: values(:)
 
-        this%indices = transfer(indices,[0_int8])
-        call this%map%get_other_data(this%indices,this%temp_val)
+        integer(int8), allocatable :: key(:)
+        class(*), allocatable :: temp
 
-        associate (temp_val => this%temp_val)
-        select type (temp_val)
-        type is (val_type)
-            values = temp_val%val
+        key = transfer(indices,[0_int8])
+
+        call this%map%get_other_data(key,temp)
+        select type (temp)
+        type is (ptr_type)
+            values = this%data(temp%ptr:temp%ptr+this%N_val-1)
         class default
-            error stop 'Wrong dynamic type of temp_val'
+            error stop 'Wrong dynamic type of ptr'
         end select
-        end associate
     end subroutine get_val_Nd_DOK
 
     subroutine init_CS(this,shape,nnz)

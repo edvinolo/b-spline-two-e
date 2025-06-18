@@ -24,8 +24,7 @@ program main_basis_setup
     type(radial_dipole) :: radial_dip
     type(sparse_4d) :: r_k,r_m_k
     type(sparse_6d) :: r_d_k
-    type(sparse_Slater) :: Rk
-    double precision, dimension(:,:,:,:,:),allocatable :: R_p
+    class(Nd_DOK), allocatable :: R_p
 
     double complex, dimension(:,:), allocatable :: eigs_v
     type(block), dimension(:), allocatable :: vecs_v
@@ -80,10 +79,9 @@ program main_basis_setup
     call setup_Slater_integrals(splines,max_k,k_GL,r_k,r_m_k,r_d_k)
     t_end = omp_get_wtime()
     write(6,*) "Time computing primitive cell integrals (s): ", t_end -t_start
-    call Rk%init(max_k,splines,r_d_k,r_k,r_m_k)
 
-    allocate(R_p(0:max_k,splines%n_b,splines%n_b,splines%n_b,splines%n_b),source=0.d0)
-    call compute_R_k(r_d_k,r_k,r_m_k,max_k,splines%n_b,R_p)
+    allocate(Nd_DOK :: R_p)
+    call compute_R_k_map(r_d_k,r_k,r_m_k,splines,max_k,R_p)
 
     allocate(eigs_v(splines%n_b,0:max_l_1p),vecs_v(0:max_l_1p))
     call find_orbitals(splines,k_GL,pot,CAP_c,max_l_1p,eigs_v,vecs_v)
@@ -104,9 +102,9 @@ program main_basis_setup
     call S_diag%init(bas%n_sym)
     !$omp parallel do
     do i = 1,bas%n_sym
-        call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,Rk,R_p,H_diag%blocks(i),S_diag%blocks(i),full)
-        write(6,'(a,i0,a,es0.4)') "Density H(", i,"): ", real(H_diag%blocks(i)%nnz)/(H_diag%blocks(i)%shape(1)**2)
-        write(6,'(a,i0,a,es0.4)') "Density S(", i,"): ", real(S_diag%blocks(i)%nnz)/(S_diag%blocks(i)%shape(1)**2)
+        call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,R_p,H_diag%blocks(i),S_diag%blocks(i),full)
+        write(6,'(a,i0,a,es0.4)') "Density H(", i,"): ", real(H_diag%blocks(i)%nnz,kind=dp)/(H_diag%blocks(i)%shape(1)**2)
+        write(6,'(a,i0,a,es0.4)') "Density S(", i,"): ", real(S_diag%blocks(i)%nnz,kind=dp)/(S_diag%blocks(i)%shape(1)**2)
     end do
     !$omp end parallel do
     call H_diag%compute_shape()

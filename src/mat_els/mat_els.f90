@@ -549,24 +549,24 @@ contains
         end do
     end function r_12
 
-    pure function r_12_tens(L,configs,a,b,c,d,max_k,Rk,ptr,R_k) result(res)
+    function r_12_tens(L,configs,a,b,c,d,max_k,R_k) result(res)
         integer, intent(in) :: L
         type(config), dimension(2), intent(in) :: configs
         integer, intent(in) :: a,b,c,d
         integer, intent(in) :: max_k
-        type(sparse_Slater), intent(in) :: Rk
-        integer, intent(in) :: ptr
-        double precision, dimension(:,:,:,:,:), allocatable,intent(in) :: R_k
+        type(Nd_DOK), intent(inout) :: R_k
         double precision :: res
 
         integer :: k
         double precision :: ang
+        double precision :: vals(0:max_k)
 
         res = 0.d0
+        call R_k%get_val([a,b,c,d],vals)
         do k = 0, max_k
             ang = ang_k_LS(k,configs,L)
             if (abs(ang)<5.d-16) cycle
-            res = res + R_k(k,a,b,c,d)*ang
+            res = res + vals(k)*ang
         end do
     end function r_12_tens
 
@@ -605,14 +605,14 @@ contains
         if (.not.both) res = sqrt(2.d0)*res
     end function c_mat_eq
 
-    pure function c_mat_neq_tens(L,configs,a,b,c,d,max_k,Rk,ptr,R_k) result(res)
+    function c_mat_neq_tens(L,configs,a,b,c,d,max_k,R_k,support,support_ex) result(res)
         integer, intent(in) :: L
         type(config), dimension(2), intent(in) :: configs
         integer, intent(in) :: a,b,c,d
         integer, intent(in) :: max_k
-        type(sparse_Slater), intent(in) :: Rk
-        integer, intent(in) :: ptr
-        double precision, dimension(:,:,:,:,:), allocatable, intent(in) :: R_k
+        type(Nd_DOK), intent(inout) :: R_k
+        logical, intent(in) :: support
+        logical, intent(in) :: support_ex
         double precision :: res
 
         type(config), dimension(2) :: configs_ex
@@ -620,23 +620,28 @@ contains
         configs_ex(1) = configs(1)
         configs_ex(2)%n = configs(2)%n([2,1])
         configs_ex(2)%l = configs(2)%l([2,1])
-        res = r_12_tens(L,configs,a,b,c,d,max_k,Rk,ptr,R_k)
-        res = res + (-1)**(configs(2)%l(1) + configs(2)%l(2) + L)&
-                *r_12_tens(L,configs_ex,a,b,d,c,max_k,Rk,ptr,R_k)
+        res = 0.0d0
+
+        if (support) then
+            res = res + r_12_tens(L,configs,a,b,c,d,max_k,R_k)
+        end if
+
+        if (support_ex) then
+            res = res + (-1)**(configs(2)%l(1) + configs(2)%l(2) + L)&
+                    *r_12_tens(L,configs_ex,a,b,d,c,max_k,R_k)
+        end if
     end function c_mat_neq_tens
 
-    pure function c_mat_eq_tens(both,L,configs,a,b,c,d,max_k,Rk,ptr,R_k) result(res)
+    function c_mat_eq_tens(both,L,configs,a,b,c,d,max_k,R_k) result(res)
         logical, intent(in) :: both
         integer, intent(in) :: L
         type(config), dimension(2), intent(in) :: configs
         integer, intent(in) :: a,b,c,d
         integer, intent(in) :: max_k
-        type(sparse_Slater), intent(in) :: Rk
-        integer, intent(in) :: ptr
-        double precision, dimension(:,:,:,:,:), allocatable, intent(in) :: R_k
+        type(Nd_DOK), intent(inout) :: R_k
         double precision :: res
 
-        res = r_12_tens(L,configs,a,b,c,d,max_k,Rk,ptr,R_k)
+        res = r_12_tens(L,configs,a,b,c,d,max_k,R_k)
 
         if (.not.both) res = sqrt(2.d0)*res
     end function c_mat_eq_tens

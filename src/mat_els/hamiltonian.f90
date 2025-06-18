@@ -103,21 +103,20 @@ contains
         write(6,*) 'Time to construct H_block (s): ', t_2-t_1
     end subroutine construct_block
 
-    subroutine construct_block_tensor(H,S,b_splines,term,max_k,Rk,R_k,H_sp,S_sp,full)
+    subroutine construct_block_tensor(H,S,b_splines,term,max_k,R_k,H_sp,S_sp,full)
         type(block), dimension(:), allocatable, intent(in) :: H
         double complex, dimension(:,:), intent(in) :: S
         type(b_spline), intent(in) :: b_splines
         type(sym), intent(in) :: term
         integer, intent(in) :: max_k
-        type(sparse_Slater), intent(in) :: Rk
-        double precision, dimension(:,:,:,:,:), allocatable,intent(in) :: R_k
+        type(Nd_DOK), intent(inout) :: R_k
         type(CSR_matrix), intent(out) :: H_sp,S_sp
         logical, intent(in) :: full
 
         logical :: both
         integer, target :: i,one
         integer, pointer :: low
-        integer :: j,k,ptr
+        integer :: j,k
         integer :: n_a,n_b,n_c,n_d
         integer :: l_a,l_b,l_c,l_d
         type(config), dimension(2) :: confs,confs_ex
@@ -146,7 +145,6 @@ contains
         write(6,*) term%l,term%m,term%pi,term%n_config
 
         t_1 = omp_get_wtime()
-        ptr = 1
         r_12_allowed = .false.
         if (mod(term%l,2)/=0) then
             do i = 1,term%n_config
@@ -184,7 +182,7 @@ contains
 
                         if (r_12_allowed) then
                             H_sp%data(row_ptr_H) = H_sp%data(row_ptr_H) + c_mat_neq_tens(term%l,confs,&
-                            n_a,n_b,n_c,n_d,max_k,Rk,0,R_k)
+                            n_a,n_b,n_c,n_d,max_k,R_k,support,support_ex)
                         end if
 
                         if ((support.and.l_eq).or.(support_ex.and.l_eq_ex)) then
@@ -245,7 +243,7 @@ contains
 
                             if (r_12_allowed) then
                                 H_sp%data(row_ptr_H) = H_sp%data(row_ptr_H) + c_mat_neq_tens(term%l,confs,&
-                                n_a,n_b,n_c,n_d,max_k,Rk,0,R_k)
+                                n_a,n_b,n_c,n_d,max_k,R_k,support,support_ex)
                             end if
 
                             if ((support.and.l_eq).or.(support_ex.and.l_eq_ex)) then
@@ -257,7 +255,7 @@ contains
                         else
                             if (r_12_allowed) then
                                 H_sp%data(row_ptr_H) = H_sp%data(row_ptr_H) + c_mat_neq_tens(term%l,confs,&
-                                n_a,n_b,n_c,n_d,max_k,Rk,0,R_k)
+                                n_a,n_b,n_c,n_d,max_k,R_k,support,support_ex)
                             end if
 
                             if ((support.and.l_eq).or.(support_ex.and.l_eq_ex)) then
@@ -353,21 +351,22 @@ contains
         end do
     end function count_nnz
 
-    subroutine construct_block_tensor_dense(H_block,H,S_Block,S,term,max_k,Rk,R_k,full)
+    subroutine construct_block_tensor_dense(H_block,H,S_Block,S,b_splines,term,max_k,R_k,full)
         type(block), intent(inout) :: H_block
         type(block), dimension(:), allocatable, intent(in) :: H
         type(block), intent(inout) :: S_block
         double complex, dimension(:,:), intent(in) :: S
+        type(b_spline), intent(in) :: b_splines
         type(sym), intent(in) :: term
         integer, intent(in) :: max_k
-        type(sparse_Slater), intent(in) :: Rk
-        double precision, dimension(:,:,:,:,:), allocatable,intent(in) :: R_k
+        type(Nd_DOK), intent(inout) :: R_k
         logical, intent(in) :: full
 
         integer :: i,j
         integer :: n_a,n_b,n_c,n_d
         integer :: l_a,l_b,l_c,l_d
         type(config), dimension(2) :: confs
+        logical :: support, support_ex
 
         double precision :: t_1,t_2
 
@@ -387,9 +386,12 @@ contains
                 l_d = term%configs(j)%l(2)
                 confs(1) = term%configs(j)
 
+                support = (abs(n_a-n_c)<b_splines%k).and.(abs(n_b-n_d)<b_splines%k)
+                support_ex = (abs(n_a-n_d)<b_splines%k).and.(abs(n_b-n_c)<b_splines%k)
+
                 H_block%data(j,i) = H_block%data(j,i) + H_1p_neq(confs,term%l,H,S)
                 H_block%data(j,i) = H_block%data(j,i) + c_mat_neq_tens(term%l,confs,&
-                                n_a,n_b,n_c,n_d,max_k,Rk,0,R_k)
+                                n_a,n_b,n_c,n_d,max_k,R_k,support,support_ex)
                 S_block%data(j,i) = S_block%data(j,i) + S_mat_neq(confs,term%l,S)
 
                 if (full) then
