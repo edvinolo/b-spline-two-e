@@ -66,6 +66,8 @@ program main_quasienergies
         call omega_follow(H_0_block,S_block,D,bas,gs_energy,quasi_res_dir)
     else if (calc_type == 'intensity_follow') then
         call intensity_follow(H_0_block,S_block,D,bas,gs_energy,quasi_res_dir)
+    else if (calc_type == 'static') then
+        call static_scan(H_0_block,S_block,dip(0),bas,gs_energy,quasi_res_dir)
     end if
 
     write(6,*) ""

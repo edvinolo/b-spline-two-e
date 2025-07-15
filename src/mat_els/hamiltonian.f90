@@ -319,6 +319,7 @@ contains
                 l_d = term%configs(j)%l(2)
                 confs(2) = term%configs(j)
 
+                ! write(6,*) n_a,n_b,n_c,n_d
                 support = (abs(n_a-n_c)<b_splines%k).and.(abs(n_b-n_d)<b_splines%k)
                 support_ex = (abs(n_a-n_d)<b_splines%k).and.(abs(n_b-n_c)<b_splines%k)
                 if (support) then

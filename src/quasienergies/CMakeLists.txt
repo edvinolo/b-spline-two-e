@@ -2,6 +2,7 @@ set(quasienergies_files
     "quasi_calcs.f90"
     "quasi_circ.f90"
     "quasi_floquet.f90"
+    "static.f90"
 )
 
 add_library(quasienergies ${quasienergies_files})

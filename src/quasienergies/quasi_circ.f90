@@ -1,7 +1,7 @@
 module quasi_circ
     use kind_tools
     use constants_tools
-    use block_tools
+    use block_tools, only: block_CS,block_diag_CS,AXPBY,APX,XPAY
     use orbital_tools, only: basis
     implicit none
 

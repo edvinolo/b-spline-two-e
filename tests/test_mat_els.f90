@@ -9,7 +9,7 @@ program mat_els_test
     use orbitals
     use hamiltonian
     use dipole
-    use stdlib_linalg, only: eig,eigvals
+    use stdlib_linalg, only: eig,eigvals,svd
     use stdlib_sorting, only: sort
     use omp_lib, only: omp_get_wtime
     implicit none
@@ -70,8 +70,8 @@ program mat_els_test
     k = 8
     m = 3
     Z = 2
-    h_max = 0.5d0
-    r_max = 30.d0
+    h_max = 1.5d0
+    r_max = 15.d0
     k_GL = splines%k + 6
     call generate_grid(k,m,Z,h_max,r_max,grid)
     call splines%init(k,grid)
@@ -94,7 +94,7 @@ program mat_els_test
     call setup_H_one_particle(pot,CAP_c,l,splines,k_GL,H)
     call setup_S(splines,k_GL,S)
 
-    gauge = 'l'
+    gauge = 'v'
     call setup_radial_dip(splines,k_GL,radial_dip,gauge)
 
     max_k = 4
@@ -306,14 +306,14 @@ program mat_els_test
     write(6,*) res
     !stop
 
-    r_2_max = 15.d0
+    r_2_max = -15.d0
     if (r_2_max < 0) then
         max_n_b = splines%n_b
     else
         max_n_b = splines%find_max_n_b(r_2_max)
     end if
 
-    r_all_l = 25.d0
+    r_all_l = -25.d0
     if (r_all_l < 0) then
         n_all_l = splines%n_b
     else
@@ -334,11 +334,11 @@ program mat_els_test
 
     call H_diag%init(bas%n_sym)
     call S_diag%init(bas%n_sym)
-    !$omp parallel do
+    !!$omp parallel do
     do i = 1,bas%n_sym
-        call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,R_p_map,H_diag%blocks(i),S_diag%blocks(i),.false.)
+        call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,R_p_map,H_diag%blocks(i),S_diag%blocks(i),.true.)
     end do
-    !$omp end parallel do
+    !!$omp end parallel do
     call H_diag%compute_shape()
     call S_diag%compute_shape()
 
@@ -360,14 +360,29 @@ program mat_els_test
     ! end do
     ! close(1)
 
+    open(unit=1,file='S_test_1p.dat')
+    do i = 1,splines%n_b
+        write(1,*) abs(S(i,:))
+    end do
+    close(1)
+    deallocate(S,eigs)
+    write(6,*) 'Hej!'
+    call S_diag%blocks(1)%get_dense(S)
+    open(unit=1,file='S_test.dat')
+    do i = 1,S_diag%blocks(1)%shape(1)
+        write(1,*) abs(S(i,:))
+    end do
+    close(1)
+    stop
+
     res = dcmplx(2.9d0,0.d0)
     ! call APX(H_diag,[res,res,res],S_diag)
-    call FEAST(H_diag%blocks(2),S_diag%blocks(2),.true.,.false.,dcmplx(-2.5d0,0.0d0),0.5d0,eigs,vecs,i)
+    call FEAST(H_diag%blocks(3),S_diag%blocks(3),.true.,.false.,dcmplx(-2.5d0,0.0d0),0.5d0,eigs,vecs,i)
     index_gs = minloc(real(eigs(:i)))
     i = index_gs(1)
     eig_gs = real(eigs(i),kind=8)
     vec_gs = vecs(:,i)
-    call FEAST(H_diag%blocks(3),S_diag%blocks(3),.true.,.false.,dcmplx(-2.05d0,0.0d0),.1d0,eigs,vecs,i)
+    call FEAST(H_diag%blocks(2),S_diag%blocks(2),.true.,.false.,dcmplx(-2.05d0,0.0d0),.1d0,eigs,vecs,i)
     index_gs = minloc(real(eigs(:i)))
     i = index_gs(1)
     vec_excited = vecs(:,i)
@@ -446,10 +461,10 @@ program mat_els_test
     ! write(6,*) eigs(1),eigs(2)
 
     ! allocate(dip_block(bas%syms(1)%n_config,bas%syms(2)%n_config))
-    syms(1) = bas%syms(2)
-    syms(2) = bas%syms(3)
-    ! syms%m = [0,1]
-    call construct_dip_block_tensor(syms,0,splines,S,radial_dip,dip_block_spr,.true.)
+    syms(1) = bas%syms(3)
+    syms(2) = bas%syms(2)
+    syms%m = [2,1]
+    call construct_dip_block_tensor(syms,1,splines,S,radial_dip,dip_block_spr,.true.)
     ! call construct_dip_block_dense(syms,0,S,radial_dip,dip_block)
 
     allocate(vec_dip(size(vec_gs)),temp_vec(size(vec_gs)))

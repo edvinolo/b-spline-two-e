@@ -17,6 +17,7 @@ module quasi_calcs
 #endif
     use quasi_circ
     use quasi_floquet
+    use static, only: setup_H_static
     use omp_lib, only: omp_get_wtime
     implicit none
 
@@ -132,6 +133,44 @@ contains
         call end_timer()
     end subroutine intensity_scan
 
+    subroutine static_scan(H_0,S_block,D,bas,shift,res_dir)
+        type(block_diag_CS), intent(in) :: H_0
+        type(block_diag_CS), intent(inout) :: S_block
+        type(block_CS), intent(in) :: D
+        type(basis), intent(in) :: bas
+        complex(dp), intent(in) :: shift
+        character(len=*), intent(in) :: res_dir
+
+        real(dp) :: V_0(n_calc)
+        real(dp) :: intensity(n_calc)
+        real(dp) :: omega
+
+        integer :: i
+
+        call start_timer()
+
+        intensity = logspace(log10(calc_param(1)),log10(calc_param(2)),n_calc)
+        omega = other_param
+
+        call allocate_result(bas)
+        if (track_proj) call allocate_temp_results()
+
+        call S_block%to_CS(S,.false.)
+
+        do i = 1,n_calc
+            call print_params(i,intensity(i),omega,shift)
+            V_0(i) = field_strength(intensity(i),omega)
+            call compute_quasi(H_0,S_block,D,bas,i,V_0(i),omega,shift,n_quasi,eigs(:,i),vecs(:,:,i))
+            if ((track_proj).and.(i>1)) call reorder_proj(i)
+        end do
+
+        call cleanup_solvers()
+
+        call write_eigs(res_dir)
+        call write_static(res_dir,V_0)
+        call end_timer()
+    end subroutine static_scan
+
     subroutine omega_follow(H_0,S_Block,D,bas,shift,res_dir)
         type(block_diag_CS), intent(in) :: H_0
         type(block_diag_CS), intent(inout) :: S_block
@@ -244,7 +283,11 @@ contains
         complex(dp), optional, intent(in) :: v0(:)
 
         if (z_pol) then
+            if (calc_type == 'static') then
+                call setup_H_static(H_block, bas, H_0, S_block, D, shift_i, V_0_i)
+            else
             ! H_0_shift = setup_H_0_floquet()
+            end if
         else
             call setup_H_circ(H_block, bas, H_0, S_block, D, omega_i, shift_i, V_0_i)
         end if
@@ -342,6 +385,9 @@ contains
         res = 0
         if (z_pol) then
             !TODO
+            if (calc_type == 'static') then
+                res = sum(bas%syms%n_config)
+            end if
         else
             res = sum(bas%syms%n_config)
         end if
@@ -416,6 +462,21 @@ contains
 
         close(unit)
     end subroutine write_intensity
+
+    subroutine write_static(res_dir,V_0)
+        character(len=*), intent(in) :: res_dir
+        real(dp), intent(in) :: V_0(:)
+
+        integer :: i,unit
+        open(file = res_dir//"static_field.out", newunit = unit, action = 'write')
+
+        write(unit,'(a)') "# V_0 [a.u.]"
+        do i = 1,n_calc
+            write(unit,'(es24.17)') V_0(i)
+        end do
+
+        close(unit)
+    end subroutine write_static
 
     subroutine print_params(iteration,intensity,omega,shift,j)
         integer, intent(in) :: iteration

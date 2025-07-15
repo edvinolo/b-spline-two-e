@@ -119,17 +119,33 @@ contains
         double complex, dimension(:,:), allocatable, intent(in) :: eigs
         type(config), dimension(:), allocatable :: res
 
-        integer :: i,j,n_i,n_j,ptr
+        integer :: i,j,n_i,n_j,ptr,n_orbitals
         logical :: eqv
         double complex :: energy_1p
         type(orbital), dimension(2) :: orbs
         type(config) :: conf
         type(config), dimension(:), allocatable :: temp_list
+        integer, dimension(:,:), allocatable :: orbital_list,temp_orbital
 
         orbs%m = 0
         ptr = 1
         energy_1p = 0.d0
-        allocate(temp_list((max_l_1p+1)**2*n_b**2))
+        n_orbitals = (max_l_1p+1)*n_b
+        allocate(temp_list(n_orbitals**2),temp_orbital(2,n_orbitals))
+
+        do i = 0,max_l_1p
+            do n_i = min(i+1,k_spline-1),n_b
+                temp_orbital(1,ptr) = n_i
+                temp_orbital(2,ptr) = i
+                ptr = ptr + 1
+            end do
+        end do
+
+        n_orbitals = ptr-1
+        allocate(orbital_list(2,n_orbitals))
+        orbital_list = temp_orbital(:,:n_orbitals)
+
+        ptr = 1
         do i = 0,max_l_1p
             orbs(1)%l = i
             orbs(1)%pi = (mod(i,2)/=0)
@@ -167,6 +183,25 @@ contains
                 end do
             end do
         end do
+
+        ! ptr = 1
+        ! do i = 1,n_orbitals
+        !     orbs(1)%l = orbital_list(2,i)
+        !     orbs(1)%pi = (mod(orbs(1)%l,2)/=0)
+        !     do j = i,n_orbitals
+        !         ! if (j+term%l > max_l_1p+1) cycle !Limit the angular momentum of second electron
+        !         orbs(2)%l = orbital_list(2,j)
+        !         orbs(2)%pi = (mod(orbs(2)%l,2)/=0)
+        !         eqv = (i==j)
+        !         if (consistent(orbs,term,eqv)) then
+        !             conf%n = [orbital_list(1,i),orbital_list(1,j)]
+        !             conf%l = [orbs(1)%l,orbs(2)%l]
+        !             conf%eqv = eqv
+        !             temp_list(ptr) = conf
+        !             ptr = ptr + 1
+        !         end if
+        !     end do
+        ! end do
 
         allocate(res(ptr-1))
         res = temp_list(1:ptr-1)

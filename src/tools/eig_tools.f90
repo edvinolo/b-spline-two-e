@@ -191,7 +191,12 @@ contains
         t_2 = omp_get_wtime()
         write(stdout,*) "Time for FEAST eigenvalue estimation (s): ", t_2-t_1
 
-        M_0 = int(M*1.5_dp)
+        if (M>10) then
+            M_0 = int(M*1.5_dp)
+        else
+            M_0 = 2*M
+        end if
+
         write(stdout,'(a,i0)')  'FEAST estimate for # of enclosed eigenvalues:', M
 
         write(stdout,*) "Finding eigenvalues using FEAST"
@@ -212,7 +217,11 @@ contains
 
             if (info == 3) then
                 i = i + 1
-                M_0 = int(M_0*1.5_dp)
+                if (M_0>10) then
+                    M_0 = int(M_0*1.5_dp)
+                else
+                    M_0 = 2*M_0
+                end if
                 write(stdout,'(a)') 'FEAST exited with info code 3 (work subspace too small)'
                 write(stdout,'(a,i0)') 'Increasing M_0 and retrying. New M_0: ', M_0
             else
@@ -272,7 +281,7 @@ contains
         complex(dp), allocatable :: workl(:)
         real(dp), allocatable :: rwork(:)
 
-        integer :: x_1,x_2,y_1,y_2,i
+        integer :: x_1,x_2,y_1,y_2
         complex(dp), allocatable :: temp(:)
 
         ! Select correct routine for B matvecs
@@ -366,8 +375,7 @@ contains
                                 workd,workl,lworkl,rwork,info)
     end subroutine drive_ARPACK_PARDISO
 
-    subroutine drive_ARPACK_precond(A,precond,B,full,shift,n_eigs,eigs,vecs,v0,max_iter,tol)
-        type(CSR_matrix), intent(in) :: A
+    subroutine drive_ARPACK_precond(precond,B,full,shift,n_eigs,eigs,vecs,v0,max_iter,tol)
         class(block_PC), intent(inout) :: precond
         type(CSR_matrix), intent(in) :: B
         logical, intent(in) :: full
@@ -394,7 +402,7 @@ contains
         complex(dp), allocatable :: workl(:)
         real(dp), allocatable :: rwork(:)
 
-        integer :: x_1,x_2,y_1,y_2,i
+        integer :: x_1,x_2,y_1,y_2
         complex(dp), allocatable :: temp(:)
 
         ! Select correct routine for B matvecs
@@ -516,7 +524,7 @@ contains
         complex(dp), allocatable :: workl(:)
         real(dp), allocatable :: rwork(:)
 
-        integer :: x_1,x_2,y_1,y_2,i
+        integer :: x_1,x_2,y_1,y_2
         complex(dp), allocatable :: temp(:)
 
         ! Select correct routine for B matvecs

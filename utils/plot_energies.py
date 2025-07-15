@@ -37,6 +37,10 @@ for folder in sys.argv[1:]:
         sim_type = 'intensity'
         x_variable = np.loadtxt(f'{folder}/intensity.out')
 
+    elif os.path.isfile(f'{folder}/static_field.out'):
+        sim_type = 'static'
+        x_variable = np.loadtxt(f'{folder}/static_field.out')
+
     else:
         raise RuntimeError('Could not find appropriate data file for x values')
 
@@ -61,6 +65,10 @@ elif sim_type == 'intensity':
     ax_im.set_xscale('log')
     #format_plot(fig_re,ax_re,'Intensity [W/cm$^2$]','Re $E$ [a.u.]')
     #format_plot(fig_im,ax_im,'Intensity [W/cm$^2$]','Rate [a.u.]')
+
+elif sim_type == 'static':
+    ax_re.set_xscale('log')
+    ax_im.set_xscale('log')
 
 #format_plot(fig_trajs,ax_trajs,'Re $E$ [a.u.]','Rate [a.u.]')
 
