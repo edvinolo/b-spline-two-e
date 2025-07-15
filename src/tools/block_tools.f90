@@ -553,7 +553,7 @@ contains
 
     ! Function that returns the result of adding a block sparse matrix X to a block sparse matrix Y.
     ! It it assumed that X and Y do not have overlapping nonzero blocks
-    ! The second matrix is scaled by alpha
+    ! The first matrix is scaled by alpha and the second by beta
     function CS_A_block_X_P_B_block_Y(X,alpha,Y,beta) result(res)
         type(block_CS), intent(in) :: X
         double complex, intent(in) :: alpha

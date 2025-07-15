@@ -513,7 +513,6 @@ contains
         real(dp), intent(in) :: val(:)
 
         logical(int32) :: exists
-        integer :: entry
 
         this%indices = transfer(indices,[0_int8])
 
@@ -1048,14 +1047,14 @@ contains
         end if
 
         if (A%nnz == 0) then
-            y = 0_dp
+            y = 0.0_dp
             return
         end if
 
         !$omp parallel private(j)
         !$omp do
         do i = 1,A%shape(1)
-            y(i) = 0_dp
+            y(i) = 0.0_dp
             do j = A%index_ptr(i),A%index_ptr(i+1)-1
                 y(i) = y(i) + A%data(j)*x(A%indices(j))
             end do

@@ -4,7 +4,7 @@ implicit none
 
 public
     real(dp), parameter :: length_au = 5.291772109e-11_dp
-    real(dp), parameter :: au_to_eV= 27.211386245988_dp
+    real(dp), parameter :: au_to_eV = 27.211386245988_dp
     real(dp), parameter :: time_au = 2.4188843265857e-17_dp
     real(dp), parameter :: fs_to_au = 1e-15_dp/time_au
     real(dp), parameter :: alpha = 0.007297352562787135_dp

@@ -80,7 +80,7 @@ contains
         complex(dp), intent(out) :: sol(this%n,nrhs)
         complex(dp), intent(in) :: rhs(this%n,nrhs)
 
-        integer i,k
+        integer i
 
         !$omp parallel do
         do i=1,nrhs
