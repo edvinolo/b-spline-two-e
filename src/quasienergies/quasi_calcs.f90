@@ -413,16 +413,16 @@ contains
                 write(unit,'(a)', advance='no') '('
 
                 if (real(eigs(j,i),kind = dp)<0) then
-                    write(unit,'(es24.17e2)', advance='no') real(eigs(j,i),kind = dp)
+                    write(unit,'(es25.17e3)', advance='no') real(eigs(j,i),kind = dp)
                 else
-                    write(unit,'(es23.17e2)', advance='no') real(eigs(j,i),kind = dp)
+                    write(unit,'(es24.17e3)', advance='no') real(eigs(j,i),kind = dp)
                 end if
 
                 if (aimag(eigs(j,i))<0) then
-                    write(unit,'(es24.17e2)', advance='no') aimag(eigs(j,i))
+                    write(unit,'(es25.17e3)', advance='no') aimag(eigs(j,i))
                 else
                     write(unit,'(a)', advance='no') '+'
-                    write(unit,'(es23.17e2)', advance='no') aimag(eigs(j,i))
+                    write(unit,'(es24.17e3)', advance='no') aimag(eigs(j,i))
                 end if
 
                 write(unit,'(a)', advance='no') 'j) '
@@ -646,35 +646,38 @@ contains
         real(dp) :: proj,max_proj
         complex(dp), allocatable :: temp(:)
         logical :: free(n_quasi)
+        real(dp) :: projs(n_quasi)
 
         free = .true.
         allocate(temp(n_states))
 
         do j=1,n_quasi
             if (full) then
-                call CSR_mv(S,vecs(:,j,i),temp)
+                call CSR_mv(S,vecs(:,j,i-1),temp)
             else
-                call CSR_mv_sym(S,vecs(:,j,i),temp)
+                call CSR_mv_sym(S,vecs(:,j,i-1),temp)
             end if
 
             max_proj = -1.0_dp
             max = -1
             do kk=1,n_quasi
-                proj = abs(zdotu(n_states,vecs(:,kk,i-1),1,temp,1))
+                proj = abs(zdotu(n_states,vecs(:,kk,i),1,temp,1))
                 if (proj > max_proj) then
                     max = kk
                     max_proj = proj
                 end if
             end do
 
-            if (free(max)) then
-                free(max) = .false.
-                vecs_i(:,max) = vecs(:,j,i)
-                eigs_i(max) = eigs(j,i)
+            if (free(j)) then
+                free(j) = .false.
+                vecs_i(:,j) = vecs(:,max,i)
+                eigs_i(j) = eigs(max,i)
+                projs(j) = max_proj
             else
                 free(j) = .false. ! Don't move it if already found vector that wants the max slot (TODO: choose the one with largest projection to go in max slot)
-                vecs_i(:,j) = vecs(:,j,i)
-                eigs_i(j) = eigs(j,i)
+                vecs_i(:,j) = vecs(:,max,i)
+                eigs_i(j) = eigs(max,i)
+                projs(j) = max_proj
             end if
         end do
 
@@ -682,9 +685,9 @@ contains
         eigs(:,i) = eigs_i
 
         write(stdout,*) ''
-        write(stdout,*) 'Reordered eigenvalues:'
+        write(stdout,*) 'Reordered eigenvalues with projections:'
         do j=1,n_quasi
-            write(stdout,*) eigs(j,i)
+            write(stdout,*) eigs(j,i), projs(j)
         end do
         write(stdout,*) ''
     end subroutine reorder_proj
