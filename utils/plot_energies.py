@@ -6,9 +6,34 @@ import matplotlib.cm
 from matplotlib.colors import Normalize
 from itertools import cycle
 
-
 #sys.path.append('./format-plot/')
 #from plot_utils import format_plot
+
+def parse_projections(path):
+    with open(path,'r') as file:
+        lines = file.readlines()
+
+    line = lines[2]
+    line = line.split()
+    n_quasi = int(line[0])
+    n_ess = int(line[1])
+    n_calc = int(line[2])
+
+    projections = np.zeros((n_quasi,n_ess,n_calc))
+
+    i = 0
+    j = 0
+    for line in lines[3:]:
+        line = line.split()
+        if len(line) > 1:
+            for k in range(len(line)):
+                projections[k,j,i] = float(line[k])
+            j += 1
+        else:
+            i += 1
+            j = 0
+
+    return projections
 
 lines = ["-","--","-.",":"]
 linecycler = cycle(lines)
@@ -18,6 +43,8 @@ fig_re,ax_re = plt.subplots()
 fig_im,ax_im = plt.subplots()
 fig_trajs,ax_trajs = plt.subplots()
 ax_im.set_yscale('log')
+
+create_projs_plot = True
 
 for folder in sys.argv[1:]:
     energies = np.loadtxt(f'{folder}/energies.out',dtype = np.complex128)
@@ -44,6 +71,16 @@ for folder in sys.argv[1:]:
     else:
         raise RuntimeError('Could not find appropriate data file for x values')
 
+    projs = False
+    if os.path.isfile(f'{folder}/projections.out'):
+        projs = True
+        projections = parse_projections(f'{folder}/projections.out')
+        if create_projs_plot:
+            fig_projs,ax_projs = plt.subplots(1,projections.shape[1])
+            for ax in ax_projs:
+                ax.set_yscale('log')
+            create_projs_plot = False
+
 
     linestyle = next(linecycler)
     for i in range(energies.shape[1]):
@@ -54,6 +91,9 @@ for folder in sys.argv[1:]:
         ax_re.plot(x_variable,energies_real[:,i],linestyle=linestyle)
         ax_im.plot(x_variable,rates[:,i],linestyle=linestyle)
         ax_trajs.plot(energies_real[:,i],rates[:,i],linestyle=linestyle)
+        if projs:
+            for j in range(projections.shape[1]):
+                ax_projs[j].plot(x_variable,projections[i,j,:],linestyle=linestyle)
 
 if sim_type == 'omega':
     print('')

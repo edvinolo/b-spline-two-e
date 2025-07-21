@@ -63,6 +63,25 @@ contains
         call write_res(res_dir,bas)
     end subroutine do_diag
 
+    subroutine do_diag_essential(H,S,target,vec,eig)
+        type(CSR_matrix), intent(in) :: H
+        type(CSR_matrix), intent(in) :: S
+        complex(dp), intent(in) :: target
+        complex(dp), allocatable, intent(inout) :: vec(:)
+        complex(dp), intent(out) :: eig
+
+        complex(dp) :: temp_eig(2)
+        complex(dp), allocatable :: temp_vec(:,:)
+        integer, parameter :: n_energies = 2
+
+        allocate(vec(H%shape(1)), temp_vec(H%shape(1),n_energies))
+
+        call diag_block(H,S,target,n_energies,temp_eig,temp_vec)
+
+        eig = temp_eig(1)
+        vec = temp_vec(:,1)
+    end subroutine do_diag_essential
+
     subroutine diag_block(H,S,target,n_energies,energies,vectors)
         type(CSR_matrix), intent(in) :: H
         type(CSR_matrix), intent(in) :: S

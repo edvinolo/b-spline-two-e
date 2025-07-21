@@ -9,6 +9,7 @@ program main_quasienergies
     use quasi_floquet
     use quasi_circ
     use quasi_calcs
+    use essential_states, only: setup_essential_states, find_essential_states
     implicit none
 
     character(len=:), allocatable :: input_file
@@ -45,14 +46,27 @@ program main_quasienergies
         call setup_dip_circ(dip,D,gauge)
     end if
 
+    if (use_essential_states) then
+        call setup_essential_states(ess_states,n_ess,target_blocks,bas)
+        call find_essential_states(ess_states,n_ess,targets,H_0_block,S_block)
+    end if
+
     if (reduce_basis) then
-        call red_basis(bas,H_0_block,S_block,D)
+        if (use_essential_states) then
+            call red_basis(bas,H_0_block,S_block,D,ess_states)
+        else
+            call red_basis(bas,H_0_block,S_block,D)
+        end if
     else
         precond_blocks = precond_blocks_in
     end if
 
     if ((block_precond).and.(block_precond_type=='PQ')) then
-        call reorder_blocks(bas,H_0_block,S_block,D)
+        if (use_essential_states) then
+            call reorder_blocks(bas,H_0_block,S_block,D,ess_states)
+        else
+            call reorder_blocks(bas,H_0_block,S_block,D)
+        end if
     end if
 
     ! Store information about the actual basis that was used

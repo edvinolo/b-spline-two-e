@@ -74,6 +74,13 @@ module input_tools
     integer :: n_relevant
     integer, allocatable :: relevant_blocks(:)
 
+    logical :: use_essential_states
+    integer :: n_ess
+    integer, allocatable :: target_blocks(:)
+    complex(dp), allocatable :: targets(:)
+
+    logical :: calc_H_eff
+
     namelist /quasi_input/ &
     & basis_input_dir,&
     & quasi_output_dir,&
@@ -94,7 +101,12 @@ module input_tools
     & precond_blocks_in,&
     & reduce_basis,&
     & n_relevant,&
-    & relevant_blocks
+    & relevant_blocks,&
+    & use_essential_states,&
+    & n_ess,&
+    & target_blocks,&
+    & targets,&
+    & calc_H_eff
 
     ! Diagonalization input variables
     ! Some are shared with quasienergies so are not declared here
@@ -287,6 +299,37 @@ contains
             end do
         end if
 
+        if (reduce_basis.and.use_essential_states) then
+            do i=1,n_ess
+                if (.not.any(target_blocks(i)==relevant_blocks)) then
+                    write(stderr,*)
+                    write(stderr,*) "Error! target_blocks(i) not present in relevant_blocks: ",&
+                                    i, target_blocks(i), relevant_blocks
+                    write(stderr,*) "You need to supply correct values in the input file"
+                    write(stderr,*)
+                    bad_input = .true.
+                end if
+            end do
+        end if
+
+        if (calc_H_eff.and.(.not.(use_essential_states))) then
+            write(stderr,*)
+            write(stderr,*) "Error! Must use_essential_states must be .true. if calc_H_eff is .true.: ", &
+                                use_essential_states, calc_H_eff
+            write(stderr,*) "You need to supply correct values in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (calc_H_eff.and.(n_ess /= n_quasi)) then
+            write(stderr,*)
+            write(stderr,*) "Error! n_ess and n_quasi must be equal if calc_H_eff is .true.: ", n_ess, n_quasi
+            write(stderr,*) "(H_eff must be square!)"
+            write(stderr,*) "You need to supply correct values in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
         if (reduce_basis) then
             relevant_blocks = relevant_blocks(1:n_relevant)
         else
@@ -297,6 +340,11 @@ contains
             precond_blocks_in = precond_blocks_in(1:n_precond)
         else
             precond_blocks_in = precond_blocks_in(1:1)
+        end if
+
+        if (use_essential_states) then
+            target_blocks = target_blocks(:n_ess)
+            targets = targets(:n_ess)
         end if
 
         write(stdout,*)
@@ -433,6 +481,11 @@ contains
         reduce_basis = .false.
         n_relevant = 200
         allocate(relevant_blocks(n_relevant),source = -1)
+        use_essential_states = .false.
+        n_ess = 200
+        allocate(target_blocks(n_ess),source = -1)
+        allocate(targets(n_ess),source = (0.0_dp,0.0_dp))
+        calc_H_eff = .false.
     end subroutine set_quasi_defaults
 
     subroutine set_diag_defaults()

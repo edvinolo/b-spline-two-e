@@ -18,6 +18,7 @@ module quasi_calcs
     use quasi_circ
     use quasi_floquet
     use static, only: setup_H_static
+    use essential_states, only: essential_state,compute_H_eff
     use omp_lib, only: omp_get_wtime
     implicit none
 
@@ -47,6 +48,9 @@ module quasi_calcs
     complex(dp), allocatable :: vecs(:,:,:)
     complex(dp), allocatable :: eigs_i(:)
     complex(dp), allocatable :: vecs_i(:,:)
+    complex(dp), allocatable :: ess_projs(:,:,:)
+    type(essential_state), allocatable :: ess_states(:)
+    complex(dp), allocatable :: H_eff(:,:,:)
 
     ! Timing variables
     real(dp) :: t_1_quasi,t_2_quasi
@@ -85,13 +89,12 @@ contains
             call print_params(i,intensity,omega(i),shift)
             V_0 = field_strength(intensity,omega(i))
             call compute_quasi(H_0,S_block,D,bas,i,V_0,omega(i),shift,n_quasi,eigs(:,i),vecs(:,:,i))
-            if ((track_proj).and.(i>1)) call reorder_proj(i)
+            call postprocess_quasi(i,S_block)
         end do
 
         call cleanup_solvers()
 
-        call write_eigs(res_dir)
-        call write_omega(res_dir,omega)
+        call write_results(res_dir,'omega',omega)
         call end_timer()
     end subroutine omega_scan
 
@@ -123,13 +126,12 @@ contains
             call print_params(i,intensity(i),omega,shift)
             V_0 = field_strength(intensity(i),omega)
             call compute_quasi(H_0,S_block,D,bas,i,V_0,omega,shift,n_quasi,eigs(:,i),vecs(:,:,i))
-            if ((track_proj).and.(i>1)) call reorder_proj(i)
+            call postprocess_quasi(i,S_block)
         end do
 
         call cleanup_solvers()
 
-        call write_eigs(res_dir)
-        call write_intensity(res_dir,intensity)
+        call write_results(res_dir,'intensity',intensity)
         call end_timer()
     end subroutine intensity_scan
 
@@ -161,13 +163,12 @@ contains
             call print_params(i,intensity(i),omega,shift)
             V_0(i) = field_strength(intensity(i),omega)
             call compute_quasi(H_0,S_block,D,bas,i,V_0(i),omega,shift,n_quasi,eigs(:,i),vecs(:,:,i))
-            if ((track_proj).and.(i>1)) call reorder_proj(i)
+            call postprocess_quasi(i,S_block)
         end do
 
         call cleanup_solvers()
 
-        call write_eigs(res_dir)
-        call write_static(res_dir,V_0)
+        call write_results(res_dir,'static',V_0)
         call end_timer()
     end subroutine static_scan
 
@@ -210,12 +211,12 @@ contains
                     vecs(:,j,i) = vecs_i(:,max_i)
                 end do
             end if
+            call postprocess_quasi(i,S_block)
         end do
 
         call cleanup_solvers()
 
-        call write_eigs(res_dir)
-        call write_omega(res_dir,omega)
+        call write_results(res_dir,'omega',omega)
         call end_timer()
     end subroutine omega_follow
 
@@ -258,14 +259,13 @@ contains
                     vecs(:,j,i) = vecs_i(:,max_i)
                 end do
             end if
+            call postprocess_quasi(i,S_block)
         end do
 
         call cleanup_solvers()
 
-        call write_eigs(res_dir)
-        call write_intensity(res_dir,intensity)
+        call write_results(res_dir,'intensity',intensity)
         call end_timer()
-
     end subroutine intensity_follow
 
     subroutine compute_quasi(H_0,S_Block,D,bas,i,V_0_i,omega_i,shift_i,n_eigs_out,eigs_out,vecs_out,v0)
@@ -336,6 +336,38 @@ contains
 
     end subroutine compute_quasi
 
+    subroutine postprocess_quasi(i,S_block)
+        integer, intent(in) :: i
+        type(block_diag_CS), intent(in) :: S_block
+
+        if ((track_proj).and.(i>1)) call reorder_proj(i)
+        if (use_essential_states) call compute_projections(i,S_block)
+        if (calc_H_eff) call compute_H_eff(n_ess,ess_projs(:,:,i),eigs(:,i),H_eff(:,:,i))
+    end subroutine postprocess_quasi
+
+    subroutine compute_projections(i,S_block)
+        integer, intent(in) :: i
+        type(block_diag_CS), intent(in) :: S_block
+
+        integer j,kk
+
+        do j = 1,n_ess
+            do kk = 1,n_quasi
+                ess_projs(kk,j,i) = ess_states(j)%projection(vecs(:,kk,i),S_block%blocks(ess_states(j)%block),full)
+            end do
+        end do
+
+        write(stdout,'(a)') "Essential state projections"
+        do j = 1,n_ess
+            write(stdout,'(a,I2,a)',advance='no') 'ES #', j,': '
+            do kk = 1,n_quasi
+                write(stdout,'(es24.17e3,a)',advance='no') abs(ess_projs(kk,j,i)), ' '
+            end do
+            write(stdout,*)''
+        end do
+        write(stdout,*)''
+    end subroutine compute_projections
+
     subroutine cleanup_solvers()
         if (direct_solver) then
             call solver%cleanup()
@@ -367,6 +399,13 @@ contains
         allocate(eigs(n_quasi,n_calc))
         allocate(vecs(n_states,n_quasi,n_calc), source = (0.0_dp,0.0_dp))
 
+        if (use_essential_states) then
+            allocate(ess_projs(n_quasi,n_ess,n_calc),source = (0.0_dp,0.0_dp))
+        end if
+
+        if (calc_H_eff) then
+            allocate(H_eff(n_ess,n_ess,n_calc),source = (0.0_dp,0.0_dp))
+        end if
     end subroutine allocate_result
 
     subroutine allocate_temp_results()
@@ -394,6 +433,27 @@ contains
 
 
     end function compute_dim
+
+    subroutine write_results(res_dir,parameter,parameter_vec)
+        character(len=*), intent(in) :: res_dir
+        character(len=*), intent(in) :: parameter
+        real(dp), intent(in) :: parameter_vec(:)
+
+        if (parameter == 'omega') then
+            call write_omega(res_dir, parameter_vec)
+        else if (parameter == 'intensity') then
+            call write_intensity(res_dir, parameter_vec)
+        else if (parameter == 'static') then
+            call write_static(res_dir, parameter_vec)
+        else
+            write(stderr,*) 'Unkown parameter argument in write_results: ', parameter
+            error stop
+        end if
+
+        call write_eigs(res_dir)
+        call write_projections(res_dir)
+        call write_H_eff(res_dir)
+    end subroutine write_results
 
     subroutine write_eigs(res_dir)
         character(len=*), intent(in) :: res_dir
@@ -432,6 +492,72 @@ contains
 
         close(unit)
     end subroutine write_eigs
+
+    subroutine write_projections(res_dir)
+        character(len=*), intent(in) :: res_dir
+
+        integer :: i,unit,j,kk
+        if (use_essential_states) then
+            open(file = res_dir//"projections.out", newunit = unit, action = 'write')
+
+            write(unit,'(a)') "# Projs. on essential states, rows: states and cols: eigenvectors. Calcs. separated by a blank line"
+            write(unit,'(a)') "# First line containts the dimensions of the ess_proj array (n_quasi,n_ess,n_calc)"
+            write(unit,'(I4,I4,I4)') n_quasi,n_ess,n_calc
+
+            do i = 1,n_calc
+                do j = 1,n_ess
+                    do kk = 1,n_quasi
+                        write(unit,'(es24.17e3,a)',advance = 'no') abs(ess_projs(kk,j,i)), ' '
+                    end do
+                    write(unit,*)''
+                end do
+                write(unit,*)''
+            end do
+
+            close(unit)
+        end if
+    end subroutine write_projections
+
+    subroutine write_H_eff(res_dir)
+        character(len=*), intent(in) :: res_dir
+
+        integer :: i,unit,j,kk
+        if (calc_H_eff) then
+            open(file = res_dir//"H_eff.out", newunit = unit, action = 'write')
+
+            write(unit,'(a)') "# H_eff computed from eigenvals and vecs. Calcs. separated by a blank line"
+            write(unit,'(a)') "# First line containts the dimensions of the H_eff array (n_ess,n_ess,n_calc)"
+            write(unit,'(I4,I4,I4)') n_ess,n_ess,n_calc
+            write(unit,'(a)') ''
+
+            do i = 1,n_calc
+                do j = 1,n_ess
+                    do kk = 1,n_ess
+                        write(unit,'(a)', advance='no') '('
+
+                        if (real(H_eff(j,kk,i),kind = dp)<0) then
+                            write(unit,'(es25.17e3)', advance='no') real(H_eff(j,kk,i),kind = dp)
+                        else
+                            write(unit,'(es24.17e3)', advance='no') real(H_eff(j,kk,i),kind = dp)
+                        end if
+
+                        if (aimag(H_eff(j,kk,i))<0) then
+                            write(unit,'(es25.17e3)', advance='no') aimag(H_eff(j,kk,i))
+                        else
+                            write(unit,'(a)', advance='no') '+'
+                            write(unit,'(es24.17e3)', advance='no') aimag(H_eff(j,kk,i))
+                        end if
+
+                        write(unit,'(a)', advance='no') 'j) '
+                    end do
+                    write(unit,*)''
+                end do
+                write(unit,*)''
+            end do
+
+            close(unit)
+        end if
+    end subroutine write_H_eff
 
     subroutine write_omega(res_dir,omega)
         character(len=*), intent(in) :: res_dir
@@ -505,13 +631,14 @@ contains
         write(6,*)
     end subroutine print_params
 
-    subroutine reorder_blocks(bas,H_0_block,S_block,D)
+    subroutine reorder_blocks(bas,H_0_block,S_block,D,states)
         type(basis), intent(inout) :: bas
         type(block_diag_CS), intent(inout) :: H_0_block
         type(block_diag_CS), intent(inout) :: S_block
         type(block_CS), intent(inout) :: D
+        type(essential_state), intent(inout), optional :: states(:)
 
-        integer :: j,i
+        integer :: j,i,kk
 
         ! write(6,*) bas%syms%m
         ! do i = 1,bas%n_sym
@@ -532,6 +659,18 @@ contains
             ! Transform off-diagonal blocks
             D%blocks([i,j],:) = D%blocks([j,i],:)
             D%blocks(:,[i,j]) = D%blocks(:,[j,i])
+
+            if (present(states)) then
+                do kk = 1,n_ess
+                    if (states(kk)%block == j) then
+                        states(kk)%block = i
+                        call states(kk)%set_pointers(bas)
+                    else if (states(kk)%block == i) then
+                        states(kk)%block = j
+                        call states(kk)%set_pointers(bas)
+                    end if
+                end do
+            end if
         end do
 
         ! If using upper storage, make sure that only blocks in the upper triangular part are present
@@ -554,11 +693,12 @@ contains
 
     end subroutine reorder_blocks
 
-    subroutine red_basis(bas,H_0_block,S_Block,D)
+    subroutine red_basis(bas,H_0_block,S_Block,D,states)
         type(basis), intent(inout) :: bas
         type(block_diag_CS), intent(inout) :: H_0_block
         type(block_diag_CS), intent(inout) :: S_block
         type(block_CS), intent(inout) :: D
+        type(essential_state), intent(inout), optional :: states(:)
 
         integer :: j,i,ptr
 
@@ -603,6 +743,17 @@ contains
         end do
         call move_alloc(D_temp,D%blocks)
         call D%compute_shape()
+
+        if (present(states)) then
+            do i = 1,n_relevant
+                do j = 1,n_ess
+                    if (states(j)%block == relevant_blocks(i)) then
+                        states(j)%block = i
+                        call states(j)%set_pointers(bas)
+                    end if
+                end do
+            end do
+        end if
     end subroutine red_basis
 
     ! Finds the vector in vecs_i with maximum S projection on vec.
