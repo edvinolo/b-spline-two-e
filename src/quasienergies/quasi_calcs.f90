@@ -623,7 +623,7 @@ contains
         end if
 
         write(6,'(a,es15.4,es15.4,a)') 'Shift: ', shift, ' [a.u.]'
-        write(6,'(a,f10.7,a,f10.7,a)') 'Omega: ', omega, ' [a.u.], ', omega*au_to_eV, ' [eV]'
+        write(6,'(a,f10.7,a,f10.6,a)') 'Omega: ', omega, ' [a.u.], ', omega*au_to_eV, ' [eV]'
         write(6,'(a,es15.4,a)') 'Intensity: ', intensity, ' [W/cm2]'
         write(6,'(a,es15.4,a)') 'E_0: ', E_0_au(intensity), ' [a.u.]'
         write(6,'(a,es15.4,a)') 'A_0: ', A_0_au(intensity,omega), ' [a.u.]'

@@ -5,9 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm
 from matplotlib.colors import Normalize
 from itertools import cycle
-
-#sys.path.append('./format-plot/')
-#from plot_utils import format_plot
+from plot_utils import format_plot
 
 def parse_projections(path):
     with open(path,'r') as file:
@@ -75,8 +73,9 @@ for folder in sys.argv[1:]:
     if os.path.isfile(f'{folder}/projections.out'):
         projs = True
         projections = parse_projections(f'{folder}/projections.out')
+        n_ess = projections.shape[1]
         if create_projs_plot:
-            fig_projs,ax_projs = plt.subplots(1,projections.shape[1])
+            fig_projs,ax_projs = plt.subplots(1,n_ess,sharey='row',figsize=(4.0*n_ess,4.8))
             for ax in ax_projs:
                 ax.set_yscale('log')
             create_projs_plot = False
@@ -92,19 +91,28 @@ for folder in sys.argv[1:]:
         ax_im.plot(x_variable,rates[:,i],linestyle=linestyle)
         ax_trajs.plot(energies_real[:,i],rates[:,i],linestyle=linestyle)
         if projs:
-            for j in range(projections.shape[1]):
+            for j in range(n_ess):
                 ax_projs[j].plot(x_variable,projections[i,j,:],linestyle=linestyle)
+                ax_projs[j].set_title(str(j+1),fontsize = 18)
 
 if sim_type == 'omega':
     print('')
-    #format_plot(fig_re,ax_re,'omega [a.u.]','Re $E$ [a.u.]')
-    #format_plot(fig_im,ax_im,'omega [a.u.]','Rate [a.u.]')
+    format_plot(fig_re,ax_re,'omega [a.u.]','Re $E$ [a.u.]')
+    format_plot(fig_im,ax_im,'omega [a.u.]','Rate [a.u.]')
+    if projs:
+        format_plot(fig_projs,ax_projs[0],'$\omega$ [a.u.]','Projections')
+        for j in range(1,n_ess):
+            format_plot(fig_projs,ax_projs[j],'$\omega$ [a.u.]','')
 
 elif sim_type == 'intensity':
     ax_re.set_xscale('log')
     ax_im.set_xscale('log')
-    #format_plot(fig_re,ax_re,'Intensity [W/cm$^2$]','Re $E$ [a.u.]')
-    #format_plot(fig_im,ax_im,'Intensity [W/cm$^2$]','Rate [a.u.]')
+    format_plot(fig_re,ax_re,'Intensity [W/cm$^2$]','Re $E$ [a.u.]')
+    format_plot(fig_im,ax_im,'Intensity [W/cm$^2$]','Rate [a.u.]')
+    if projs:
+        format_plot(fig_projs,ax_projs[0],'Intensity [W/cm$^2$]','Projections')
+        for j in range(1,n_ess):
+            format_plot(fig_projs,ax_projs[j],'Intensity [W/cm$^2$]','')
 
 elif sim_type == 'static':
     ax_re.set_xscale('log')
