@@ -46,6 +46,44 @@ contains
         !!$omp end parallel do
     end subroutine construct_dip_block_tensor
 
+    subroutine construct_dip_block_1p(syms,q,b_splines,radial_dip,dip_block,compute)
+        type(sym), dimension(2), intent(in) :: syms
+        integer, intent(in) :: q
+        type(b_spline), intent(in) :: b_splines
+        type(radial_dipole), intent(in) :: radial_dip
+        type(CSR_matrix), intent(out) :: dip_block
+        logical, intent(in) :: compute
+
+        double precision :: ang
+        logical :: parity_allowed
+        integer :: i,j,ptr,nnz
+        type(config), dimension(2) :: confs
+        integer, parameter :: conf_index = 1
+
+        ! Check if transitions are allowed between symmetry blocks
+        parity_allowed = syms(1)%pi.neqv.syms(2)%pi
+        ! Compute the Wigner-Eckart angular factor
+        ang = (-1)**(syms(1)%l-syms(1)%m)*three_j(syms(1)%l,1,syms(2)%l,-syms(1)%m,q,syms(2)%m)
+        if ((abs(ang)<5.d-16).or.(.not.parity_allowed).or.(.not.compute)) then
+            nnz = 0
+            call dip_block%init([syms(1)%n_config,syms(2)%n_config],nnz)
+            return
+        end if
+
+        call init_dip_block_1p(syms,b_splines,dip_block)
+
+        !!$omp parallel do private(confs,confs_ex,ptr,j)
+        do i=1,syms(1)%n_config
+            confs(1) = syms(1)%configs(i)
+            do ptr = dip_block%index_ptr(i),dip_block%index_ptr(i+1)-1
+                j = dip_block%indices(ptr)
+                confs(2) = syms(2)%configs(j)
+                dip_block%data(ptr) = ang*dip_red_1p(confs,conf_index,radial_dip)
+            end do
+        end do
+        !!$omp end parallel do
+    end subroutine construct_dip_block_1p
+
     subroutine init_dip_block(syms,b_splines,dip_block)
         type(sym), dimension(2), intent(in) :: syms
         type(b_spline), intent(in) :: b_splines
@@ -106,6 +144,44 @@ contains
         end do
         dip_block%index_ptr(syms(1)%n_config+1) = ptr
     end subroutine init_dip_block
+
+    subroutine init_dip_block_1p(syms,b_splines,dip_block)
+        type(sym), dimension(2), intent(in) :: syms
+        type(b_spline), intent(in) :: b_splines
+        class(CS_matrix), intent(inout) :: dip_block
+
+        integer :: i,j,nnz, ptr
+        type(config), dimension(2) :: confs
+        logical :: support
+
+        nnz = 0
+        do i=1,syms(1)%n_config
+            confs(1) = syms(1)%configs(i)
+            do j = 1,syms(2)%n_config
+                confs(2) = syms(2)%configs(j)
+                support = (abs(confs(1)%n(1)-confs(2)%n(1))<b_splines%k)
+                if (support) nnz = nnz + 1
+            end do
+        end do
+
+        call dip_block%init([syms(1)%n_config,syms(2)%n_config],nnz)
+
+        ptr = 1
+        do i=1,syms(1)%n_config
+            confs(1) = syms(1)%configs(i)
+            dip_block%index_ptr(i) = ptr
+            do j = 1,syms(2)%n_config
+                confs(2) = syms(2)%configs(j)
+
+                support = (abs(confs(1)%n(1)-confs(2)%n(1))<b_splines%k)
+                if (support) then
+                    dip_block%indices(ptr) = j
+                    ptr = ptr + 1
+                end if
+            end do
+        end do
+        dip_block%index_ptr(syms(1)%n_config+1) = ptr
+    end subroutine init_dip_block_1p
 
     subroutine construct_dip_block_dense(syms,q,S,radial_dip,dip_block_dense)
         type(sym), dimension(2), intent(in) :: syms

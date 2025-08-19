@@ -72,16 +72,18 @@ program main_basis_setup
 
     call pot%init(Z)
 
-    t_start = omp_get_wtime()
-    call r_k%init(max_k,splines)
-    call r_m_k%init(max_k,splines)
-    call r_d_k%init(max_k,splines)
-    call setup_Slater_integrals(splines,max_k,k_GL,r_k,r_m_k,r_d_k)
-    t_end = omp_get_wtime()
-    write(6,*) "Time computing primitive cell integrals (s): ", t_end -t_start
+    if (two_el) then
+        t_start = omp_get_wtime()
+        call r_k%init(max_k,splines)
+        call r_m_k%init(max_k,splines)
+        call r_d_k%init(max_k,splines)
+        call setup_Slater_integrals(splines,max_k,k_GL,r_k,r_m_k,r_d_k)
+        t_end = omp_get_wtime()
+        write(6,*) "Time computing primitive cell integrals (s): ", t_end -t_start
 
-    allocate(Nd_DOK :: R_p)
-    call compute_R_k_map(r_d_k,r_k,r_m_k,splines,max_k,R_p)
+        allocate(Nd_DOK :: R_p)
+        call compute_R_k_map(r_d_k,r_k,r_m_k,splines,max_k,R_p)
+    end if
 
     allocate(eigs_v(splines%n_b,0:max_l_1p),vecs_v(0:max_l_1p))
     call find_orbitals(splines,k_GL,pot,CAP_c,max_l_1p,eigs_v,vecs_v)
@@ -96,13 +98,18 @@ program main_basis_setup
         call setup_H_one_particle(pot,CAP_c,i,splines,k_GL,H_vec(i)%data)
     end do
 
-    call bas%init(max_L,max_l_1p,splines%n_b,splines%k,max_n_b_2,n_all_l,max_l2,z_pol,eigs_v)
+    call bas%init(max_L,max_l_1p,splines%n_b,splines%k,max_n_b_2,n_all_l,max_l2,z_pol,two_el,eigs_v)
 
     call H_diag%init(bas%n_sym)
     call S_diag%init(bas%n_sym)
     !$omp parallel do
     do i = 1,bas%n_sym
-        call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,R_p,H_diag%blocks(i),S_diag%blocks(i),full)
+        if (two_el) then
+            call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,R_p,H_diag%blocks(i),S_diag%blocks(i),full)
+        else
+            call construct_block_1p(H_vec,S,splines,bas%syms(i),H_diag%blocks(i),S_diag%blocks(i),full)
+        end if
+
         write(6,'(a,i0,a,es0.4)') "Density H(", i,"): ", real(H_diag%blocks(i)%nnz,kind=dp)/(H_diag%blocks(i)%shape(1)**2)
         write(6,'(a,i0,a,es0.4)') "Density S(", i,"): ", real(S_diag%blocks(i)%nnz,kind=dp)/(S_diag%blocks(i)%shape(1)**2)
     end do
@@ -129,7 +136,11 @@ program main_basis_setup
                     compute = .true.
                 end if
                 syms(1) = bas%syms(i)
-                call construct_dip_block_tensor(syms,q,splines,S,radial_dip,dipoles(q)%blocks(i,j),compute)
+                if (two_el) then
+                    call construct_dip_block_tensor(syms,q,splines,S,radial_dip,dipoles(q)%blocks(i,j),compute)
+                else
+                    call construct_dip_block_1p(syms,q,splines,radial_dip,dipoles(q)%blocks(i,j),compute)
+                end if
             end do
         end do
         !$omp end parallel do
@@ -149,6 +160,7 @@ program main_basis_setup
     call dipoles(1)%store(basis_res_dir//'D_1.dat')
     call write_basis_input(basis_res_dir)
     call bas%store(basis_res_dir)
+    call splines%store(basis_res_dir)
 
     t_prog_end = omp_get_wtime()
     write(6,*) "Total time for basis setup (s): ", t_prog_end - t_prog_start

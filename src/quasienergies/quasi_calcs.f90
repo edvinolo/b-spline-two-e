@@ -453,6 +453,7 @@ contains
         call write_eigs(res_dir)
         call write_projections(res_dir)
         call write_H_eff(res_dir)
+        call write_vecs(res_dir)
     end subroutine write_results
 
     subroutine write_eigs(res_dir)
@@ -558,6 +559,24 @@ contains
             close(unit)
         end if
     end subroutine write_H_eff
+
+    subroutine write_vecs(res_dir)
+        character(len=*), intent(in) :: res_dir
+
+        integer :: unit
+
+        if (store_vecs) then
+            open(file = res_dir//"vecs.dat", newunit = unit, action = 'write', form = 'unformatted')
+            write(unit) n_states
+            write(unit) n_quasi
+            write(unit) n_calc
+
+            write(unit) vecs
+
+            close(unit)
+        end if
+
+    end subroutine
 
     subroutine write_omega(res_dir,omega)
         character(len=*), intent(in) :: res_dir

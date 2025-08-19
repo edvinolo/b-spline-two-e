@@ -20,6 +20,7 @@ module orbital_tools
 
     type, public :: basis
         integer :: n_sym
+        logical :: two_el
         type(sym), dimension(:), allocatable :: syms
     contains
         procedure :: init => init_basis
@@ -207,20 +208,52 @@ contains
         res = temp_list(1:ptr-1)
     end function count_configs
 
-    pure function count_terms(max_L,z_pol) result(res)
+    pure function count_configs_1p(term,n_b,k_spline) result(res)
+        type(sym), intent(in) :: term
+        integer, intent(in) :: n_b
+        integer, intent(in) :: k_spline
+        type(config), dimension(:), allocatable :: res
+
+        integer :: n_i,ptr,n_orbitals
+        type(config) :: conf
+        type(config), dimension(:), allocatable :: temp_list
+
+        ptr = 1
+        n_orbitals = n_b
+        allocate(temp_list(n_orbitals))
+
+        ptr = 1
+        do n_i = min(term%l+1,k_spline-1),n_b
+            conf%n = [n_i,-1]
+            conf%l = [term%l,-1]
+            conf%eqv = .false.
+            temp_list(ptr) = conf
+            ptr = ptr + 1
+        end do
+
+        allocate(res(ptr-1))
+        res = temp_list(1:ptr-1)
+    end function count_configs_1p
+
+    pure function count_terms(max_L,z_pol,two_el) result(res)
         integer, intent(in) :: max_L
         logical, intent(in) :: z_pol
+        logical, intent(in) :: two_el
         integer :: res
 
         !Include ony those that are reachable from S^e block.
         if (z_pol) then
             res = max_L + 1
         else
-            res = (max_L +1)**2
+            if (two_el) then
+                res = (max_L +1)**2
+            else
+                res = max_L + 1 + max_L*(max_L + 1)/2
+            end if
         end if
     end function count_terms
 
-    pure subroutine init_basis(this,max_L,max_l_1p,n_b,k_spline,max_n_b,n_all_l,l_2_max,z_pol,eigs)
+    pure subroutine init_basis(this,max_L,max_l_1p,n_b,k_spline,max_n_b,n_all_l,l_2_max,z_pol,two_el,eigs)
         class(basis), intent(inout) :: this
         integer, intent(in) ::  max_L
         integer, intent(in) :: max_l_1p
@@ -230,17 +263,24 @@ contains
         integer, intent(in) :: n_all_l
         integer, intent(in) :: l_2_max
         logical, intent(in) :: z_pol
+        logical, intent(in) :: two_el
         double complex, dimension(:,:), allocatable, intent(in) :: eigs
 
         integer :: l,m,p,ptr
         logical :: par
-        this%n_sym = count_terms(max_L,z_pol)
+
+        this%two_el = two_el
+        this%n_sym = count_terms(max_L,z_pol,two_el)
         allocate(this%syms(this%n_sym))
 
         this%syms(1)%l = 0
         this%syms(1)%m = 0
         this%syms(1)%pi = .false.
-        this%syms(1)%configs = count_configs(this%syms(1),max_l_1p,n_b,k_spline,max_n_b,n_all_l,l_2_max,eigs)
+        if (two_el) then
+            this%syms(1)%configs = count_configs(this%syms(1),max_l_1p,n_b,k_spline,max_n_b,n_all_l,l_2_max,eigs)
+        else
+            this%syms(1)%configs = count_configs_1p(this%syms(1),n_b,k_spline)
+        end if
         this%syms(1)%n_config = size(this%syms(1)%configs)
 
         ptr = 2
@@ -251,28 +291,44 @@ contains
                 this%syms(ptr)%m = 0
                 this%syms(ptr)%pi = (mod(l,2)/=0)
                 !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
-                this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,k_spline,&
+                if (two_el) then
+                    this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,k_spline,&
                                                         max_n_b,n_all_l,l_2_max,eigs)
+                else
+                    this%syms(ptr)%configs = count_configs_1p(this%syms(ptr),n_b,k_spline)
+                end if
                 this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
                 ptr = ptr + 1
             end do
         else
             do l = 1,max_L
-                do p = 0,1
-                    if (p==0) par = .false.
-                    if (p==1) par = .true.
-                    do m = -l,l
-                        if (abs(mod(m,2))/=p) cycle
+                if (two_el) then
+                    do p = 0,1
+                        if (p==0) par = .false.
+                        if (p==1) par = .true.
+                        do m = -l,l
+                            if (abs(mod(m,2))/=p) cycle
+                            this%syms(ptr)%l = l
+                            this%syms(ptr)%m = m
+                            this%syms(ptr)%pi = par
+                            !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
+                            this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,k_spline,&
+                                                                    max_n_b,n_all_l,l_2_max,eigs)
+                            this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
+                            ptr = ptr + 1
+                        end do
+                    end do
+                else
+                    par = (mod(l,2)/=0)
+                    do m = -l,l,2
                         this%syms(ptr)%l = l
                         this%syms(ptr)%m = m
                         this%syms(ptr)%pi = par
-                        !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
-                        this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,k_spline,&
-                                                                max_n_b,n_all_l,l_2_max,eigs)
+                        this%syms(ptr)%configs = count_configs_1p(this%syms(ptr),n_b,k_spline)
                         this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
                         ptr = ptr + 1
                     end do
-                end do
+                end if
             end do
         end if
     end subroutine init_basis
@@ -285,6 +341,7 @@ contains
         character(len=:), allocatable :: format_header,format_data
 
         open(file = loc//"basis.dat", newunit = unit, action = 'write', form = "unformatted")
+        write(unit) this%two_el
         write(unit) this%n_sym
         do i = 1, this%n_sym
             write(unit) this%syms(i)%l
@@ -312,6 +369,7 @@ contains
         integer :: i, unit
 
         open(file = loc//"basis.dat", newunit = unit, action = 'read', form = "unformatted")
+        read(unit) this%two_el
         read(unit) this%n_sym
         allocate(this%syms(this%n_sym))
         do i = 1, this%n_sym

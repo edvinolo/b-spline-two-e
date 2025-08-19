@@ -17,6 +17,8 @@ module bspline_tools
         procedure :: eval_z
         procedure :: d_eval_z
         procedure :: find_max_n_b
+        procedure :: store => store_bsplines
+        procedure :: load => load_bsplines
     end type b_spline
 
 contains
@@ -355,5 +357,37 @@ contains
         iv = findloc(this%breakpoints>=x,.true.)-1 ! Find first breakpoint to the right of x, and then take the previous interval
         res = iv(1)
     end function find_max_n_b
+
+    subroutine store_bsplines(this,dir)
+        class(b_spline), intent(in) :: this
+        character(len=*), intent(in) :: dir
+
+        integer :: unit
+
+        open(file = dir//"splines.dat", newunit = unit, action = 'write', form = 'unformatted')
+        write(unit) this%k
+        write(unit) size(this%knots)
+        write(unit) this%knots
+        close(unit)
+
+    end subroutine store_bsplines
+
+    subroutine load_bsplines(this,dir)
+        class(b_spline), intent(inout) :: this
+        character(len=*), intent(in) :: dir
+
+        integer :: unit,k,knot_size
+        double precision, allocatable :: knots(:)
+
+        open(file = dir//"/splines.dat", newunit = unit, action = 'read', form = 'unformatted')
+        read(unit) k
+        read(unit) knot_size
+        allocate(knots(knot_size))
+        read(unit) knots
+        close(unit)
+
+        call this%init(k,knots)
+
+    end subroutine load_bsplines
 
 end module bspline_tools
