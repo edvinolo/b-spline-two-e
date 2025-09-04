@@ -16,6 +16,7 @@ module bspline_tools
         procedure :: d_eval_d
         procedure :: eval_z
         procedure :: d_eval_z
+        procedure :: find_interval
         procedure :: find_max_n_b
         procedure :: store => store_bsplines
         procedure :: load => load_bsplines
@@ -345,6 +346,19 @@ contains
             end if
         end if
     end subroutine INTERV
+
+    function find_interval(this,x) result(res)
+        class(b_spline), intent(in) :: this
+        double precision, intent(in) :: x
+        integer :: res
+
+        integer :: iv(1)
+
+        ! call INTERV(this%knots,this%n+1,x,res,m_flag) !This is not working properly, not clear why.
+        iv = findloc(this%breakpoints>=x,.true.)-1 ! Find first breakpoint to the right of x, and then take the previous interval
+        res = iv(1)
+
+    end function find_interval
 
     ! Finds the maximum b-spline index such that the support of the corresponding b-spline is not beyond the breakpoint interval that contains x
     function find_max_n_b(this,x) result(res)

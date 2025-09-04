@@ -119,6 +119,7 @@ module input_tools
     integer, allocatable :: blocks(:)
     integer, allocatable :: n_eigs(:)
     complex(dp), allocatable :: target_energies(:)
+    logical :: store_diag_vecs
 
     namelist /diag_input/ &
     & basis_input_dir,&
@@ -126,19 +127,28 @@ module input_tools
     & n_syms,&
     & blocks,&
     & n_eigs,&
-    & target_energies
+    & target_energies,&
+    & store_diag_vecs
 
     ! Function evaluation input variables
     character(len=:), allocatable :: eval_root_dir
     character(len=64) :: eval_dir
 
     integer(int32) :: N_r
+    integer(int32) :: N_theta
+    integer(int32) :: N_phi
     real(dp) :: r_limits(2)
+    real(dp) :: theta_limits(2)
+    real(dp) :: phi_limits(2)
 
     namelist /eval_input/ &
     & eval_dir,&
     & N_r,&
-    & r_limits
+    & r_limits,&
+    & N_theta,&
+    & theta_limits,&
+    & N_phi,&
+    & phi_limits
 
     integer, private :: i
 contains
@@ -557,6 +567,7 @@ contains
         allocate(blocks(n_syms),source = -1)
         allocate(n_eigs(n_syms),source = -1)
         allocate(target_energies(n_syms),source = (0.0_dp,0.0_dp))
+        store_diag_vecs = .false.
     end subroutine set_diag_defaults
 
     subroutine set_eval_defaults()

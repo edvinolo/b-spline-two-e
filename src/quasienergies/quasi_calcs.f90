@@ -646,6 +646,7 @@ contains
         write(6,'(a,es15.4,a)') 'Intensity: ', intensity, ' [W/cm2]'
         write(6,'(a,es15.4,a)') 'E_0: ', E_0_au(intensity), ' [a.u.]'
         write(6,'(a,es15.4,a)') 'A_0: ', A_0_au(intensity,omega), ' [a.u.]'
+        if (calc_type /= 'static') write(6,'(a,es15.4,a)') 'alpha_0: ', A_0_au(intensity,omega)/omega, ' [a.u.]'
         write(6,'(a,es15.4,a,es15.4,a)') 'U_p: ', U_p, ' [a.u.], ', U_p*au_to_eV, ' [eV]'
         write(6,*)
     end subroutine print_params
@@ -710,6 +711,8 @@ contains
         !     write(6,*) D%blocks(i,:)%nnz
         ! end do
 
+        call bas%compute_size() ! Recompute basis size and symmetry pointers
+
     end subroutine reorder_blocks
 
     subroutine red_basis(bas,H_0_block,S_Block,D,states)
@@ -728,6 +731,7 @@ contains
 
         bas%n_sym = n_relevant
         bas%syms = bas%syms(relevant_blocks)
+        call bas%compute_size() ! Recompute basis size and symmetry pointers
 
         if (block_precond.and.(block_precond_type == 'PQ')) then
             allocate(precond_blocks(n_precond))

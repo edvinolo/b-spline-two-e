@@ -27,9 +27,9 @@ program eval_rad
     if (.not.is_dir(eval_res_dir)) call mkdir(eval_res_dir)
 
     if (two_el) then
-
+        call eval_from_states_2p(eval_res_dir,eval_root_dir,bas,splines)
     else
-        call eval_from_states_1p(eval_res_dir,eval_root_dir,bas,r_limits,N_r,splines)
+        call eval_from_states_1p(eval_res_dir,eval_root_dir,bas,splines)
     end if
 
 end program eval_rad

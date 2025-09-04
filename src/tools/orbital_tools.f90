@@ -19,11 +19,16 @@ module orbital_tools
     end type config
 
     type, public :: basis
-        integer :: n_sym
+        integer :: max_l_1p
+        integer :: max_L
         logical :: two_el
-        type(sym), dimension(:), allocatable :: syms
+        integer :: n_sym
+        integer :: n_states
+        type(sym), allocatable :: syms(:)
+        integer, allocatable :: sym_ptr(:)
     contains
         procedure :: init => init_basis
+        procedure :: compute_size => compute_basis_size
         procedure :: store => store_basis
         procedure :: load => load_basis
     end type basis
@@ -269,6 +274,8 @@ contains
         integer :: l,m,p,ptr
         logical :: par
 
+        this%max_l_1p = max_l_1p
+        this%max_L = max_L
         this%two_el = two_el
         this%n_sym = count_terms(max_L,z_pol,two_el)
         allocate(this%syms(this%n_sym))
@@ -333,16 +340,41 @@ contains
         end if
     end subroutine init_basis
 
+    subroutine compute_basis_size(this)
+        class(basis), intent(inout) :: this
+
+        integer :: i,ptr
+
+        this%n_states = sum(this%syms%n_config)
+
+        if (allocated(this%sym_ptr)) deallocate(this%sym_ptr)
+        allocate(this%sym_ptr(this%n_sym+1))
+
+        ptr = 1
+        do i = 1,this%n_sym
+            this%sym_ptr(i) = ptr
+            ptr = ptr + this%syms(i)%n_config
+        end do
+        this%sym_ptr(this%n_sym+1) = ptr
+
+    end subroutine compute_basis_size
+
     subroutine store_basis(this,loc)
-        class(basis), intent(in) :: this
+        class(basis), intent(inout) :: this
         character(len=*), intent(in) ::  loc
 
         integer :: i, unit
         character(len=:), allocatable :: format_header,format_data
 
+        call this%compute_size()
+
         open(file = loc//"basis.dat", newunit = unit, action = 'write', form = "unformatted")
+        write(unit) this%max_l_1p
+        write(unit) this%max_L
         write(unit) this%two_el
         write(unit) this%n_sym
+        write(unit) this%n_states
+        write(unit) this%sym_ptr
         do i = 1, this%n_sym
             write(unit) this%syms(i)%l
             write(unit) this%syms(i)%m
@@ -369,8 +401,15 @@ contains
         integer :: i, unit
 
         open(file = loc//"basis.dat", newunit = unit, action = 'read', form = "unformatted")
+        read(unit) this%max_l_1p
+        read(unit) this%max_L
         read(unit) this%two_el
         read(unit) this%n_sym
+        read(unit) this%n_states
+
+        allocate(this%sym_ptr(this%n_sym+1))
+        read(unit) this%sym_ptr
+
         allocate(this%syms(this%n_sym))
         do i = 1, this%n_sym
             read(unit) this%syms(i)%l
