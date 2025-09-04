@@ -44,4 +44,7 @@ program test_gsl_3j
     result = ang_k_LS(2,configs,0)
     write(6,*) six_j(0,0,0,2,2,2),C_red_mat(2,0,2),result
 
+    write(6,*) sph_harm(2,2,0.1d0,0.2d0),sph_harm(2,-2,0.1d0,0.2d0)
+    write(6,*) CG(5,4,1,2,-1,1)
+
 end program test_gsl_3j

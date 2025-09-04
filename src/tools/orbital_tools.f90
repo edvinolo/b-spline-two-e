@@ -19,10 +19,16 @@ module orbital_tools
     end type config
 
     type, public :: basis
+        integer :: max_l_1p
+        integer :: max_L
+        logical :: two_el
         integer :: n_sym
-        type(sym), dimension(:), allocatable :: syms
+        integer :: n_states
+        type(sym), allocatable :: syms(:)
+        integer, allocatable :: sym_ptr(:)
     contains
         procedure :: init => init_basis
+        procedure :: compute_size => compute_basis_size
         procedure :: store => store_basis
         procedure :: load => load_basis
     end type basis
@@ -207,20 +213,52 @@ contains
         res = temp_list(1:ptr-1)
     end function count_configs
 
-    pure function count_terms(max_L,z_pol) result(res)
+    pure function count_configs_1p(term,n_b,k_spline) result(res)
+        type(sym), intent(in) :: term
+        integer, intent(in) :: n_b
+        integer, intent(in) :: k_spline
+        type(config), dimension(:), allocatable :: res
+
+        integer :: n_i,ptr,n_orbitals
+        type(config) :: conf
+        type(config), dimension(:), allocatable :: temp_list
+
+        ptr = 1
+        n_orbitals = n_b
+        allocate(temp_list(n_orbitals))
+
+        ptr = 1
+        do n_i = min(term%l+1,k_spline-1),n_b
+            conf%n = [n_i,-1]
+            conf%l = [term%l,-1]
+            conf%eqv = .false.
+            temp_list(ptr) = conf
+            ptr = ptr + 1
+        end do
+
+        allocate(res(ptr-1))
+        res = temp_list(1:ptr-1)
+    end function count_configs_1p
+
+    pure function count_terms(max_L,z_pol,two_el) result(res)
         integer, intent(in) :: max_L
         logical, intent(in) :: z_pol
+        logical, intent(in) :: two_el
         integer :: res
 
         !Include ony those that are reachable from S^e block.
         if (z_pol) then
             res = max_L + 1
         else
-            res = (max_L +1)**2
+            if (two_el) then
+                res = (max_L +1)**2
+            else
+                res = max_L + 1 + max_L*(max_L + 1)/2
+            end if
         end if
     end function count_terms
 
-    pure subroutine init_basis(this,max_L,max_l_1p,n_b,k_spline,max_n_b,n_all_l,l_2_max,z_pol,eigs)
+    pure subroutine init_basis(this,max_L,max_l_1p,n_b,k_spline,max_n_b,n_all_l,l_2_max,z_pol,two_el,eigs)
         class(basis), intent(inout) :: this
         integer, intent(in) ::  max_L
         integer, intent(in) :: max_l_1p
@@ -230,17 +268,26 @@ contains
         integer, intent(in) :: n_all_l
         integer, intent(in) :: l_2_max
         logical, intent(in) :: z_pol
+        logical, intent(in) :: two_el
         double complex, dimension(:,:), allocatable, intent(in) :: eigs
 
         integer :: l,m,p,ptr
         logical :: par
-        this%n_sym = count_terms(max_L,z_pol)
+
+        this%max_l_1p = max_l_1p
+        this%max_L = max_L
+        this%two_el = two_el
+        this%n_sym = count_terms(max_L,z_pol,two_el)
         allocate(this%syms(this%n_sym))
 
         this%syms(1)%l = 0
         this%syms(1)%m = 0
         this%syms(1)%pi = .false.
-        this%syms(1)%configs = count_configs(this%syms(1),max_l_1p,n_b,k_spline,max_n_b,n_all_l,l_2_max,eigs)
+        if (two_el) then
+            this%syms(1)%configs = count_configs(this%syms(1),max_l_1p,n_b,k_spline,max_n_b,n_all_l,l_2_max,eigs)
+        else
+            this%syms(1)%configs = count_configs_1p(this%syms(1),n_b,k_spline)
+        end if
         this%syms(1)%n_config = size(this%syms(1)%configs)
 
         ptr = 2
@@ -251,41 +298,83 @@ contains
                 this%syms(ptr)%m = 0
                 this%syms(ptr)%pi = (mod(l,2)/=0)
                 !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
-                this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,k_spline,&
+                if (two_el) then
+                    this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,k_spline,&
                                                         max_n_b,n_all_l,l_2_max,eigs)
+                else
+                    this%syms(ptr)%configs = count_configs_1p(this%syms(ptr),n_b,k_spline)
+                end if
                 this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
                 ptr = ptr + 1
             end do
         else
             do l = 1,max_L
-                do p = 0,1
-                    if (p==0) par = .false.
-                    if (p==1) par = .true.
-                    do m = -l,l
-                        if (abs(mod(m,2))/=p) cycle
+                if (two_el) then
+                    do p = 0,1
+                        if (p==0) par = .false.
+                        if (p==1) par = .true.
+                        do m = -l,l
+                            if (abs(mod(m,2))/=p) cycle
+                            this%syms(ptr)%l = l
+                            this%syms(ptr)%m = m
+                            this%syms(ptr)%pi = par
+                            !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
+                            this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,k_spline,&
+                                                                    max_n_b,n_all_l,l_2_max,eigs)
+                            this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
+                            ptr = ptr + 1
+                        end do
+                    end do
+                else
+                    par = (mod(l,2)/=0)
+                    do m = -l,l,2
                         this%syms(ptr)%l = l
                         this%syms(ptr)%m = m
                         this%syms(ptr)%pi = par
-                        !write(6,*) this%syms(ptr)%l,this%syms(ptr)%m,this%syms(ptr)%pi
-                        this%syms(ptr)%configs = count_configs(this%syms(ptr),max_l_1p,n_b,k_spline,&
-                                                                max_n_b,n_all_l,l_2_max,eigs)
+                        this%syms(ptr)%configs = count_configs_1p(this%syms(ptr),n_b,k_spline)
                         this%syms(ptr)%n_config = size(this%syms(ptr)%configs)
                         ptr = ptr + 1
                     end do
-                end do
+                end if
             end do
         end if
     end subroutine init_basis
 
+    subroutine compute_basis_size(this)
+        class(basis), intent(inout) :: this
+
+        integer :: i,ptr
+
+        this%n_states = sum(this%syms%n_config)
+
+        if (allocated(this%sym_ptr)) deallocate(this%sym_ptr)
+        allocate(this%sym_ptr(this%n_sym+1))
+
+        ptr = 1
+        do i = 1,this%n_sym
+            this%sym_ptr(i) = ptr
+            ptr = ptr + this%syms(i)%n_config
+        end do
+        this%sym_ptr(this%n_sym+1) = ptr
+
+    end subroutine compute_basis_size
+
     subroutine store_basis(this,loc)
-        class(basis), intent(in) :: this
+        class(basis), intent(inout) :: this
         character(len=*), intent(in) ::  loc
 
         integer :: i, unit
         character(len=:), allocatable :: format_header,format_data
 
+        call this%compute_size()
+
         open(file = loc//"basis.dat", newunit = unit, action = 'write', form = "unformatted")
+        write(unit) this%max_l_1p
+        write(unit) this%max_L
+        write(unit) this%two_el
         write(unit) this%n_sym
+        write(unit) this%n_states
+        write(unit) this%sym_ptr
         do i = 1, this%n_sym
             write(unit) this%syms(i)%l
             write(unit) this%syms(i)%m
@@ -312,7 +401,15 @@ contains
         integer :: i, unit
 
         open(file = loc//"basis.dat", newunit = unit, action = 'read', form = "unformatted")
+        read(unit) this%max_l_1p
+        read(unit) this%max_L
+        read(unit) this%two_el
         read(unit) this%n_sym
+        read(unit) this%n_states
+
+        allocate(this%sym_ptr(this%n_sym+1))
+        read(unit) this%sym_ptr
+
         allocate(this%syms(this%n_sym))
         do i = 1, this%n_sym
             read(unit) this%syms(i)%l

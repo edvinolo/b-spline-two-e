@@ -282,6 +282,69 @@ contains
         write(6,*) 'Time to construct H_block (s): ', t_2-t_1
     end subroutine construct_block_tensor
 
+
+    subroutine construct_block_1p(H,S,b_splines,term,H_sp,S_sp,full)
+        type(block), dimension(:), allocatable, intent(in) :: H
+        double complex, dimension(:,:), intent(in) :: S
+        type(b_spline), intent(in) :: b_splines
+        type(sym), intent(in) :: term
+        type(CSR_matrix), intent(out) :: H_sp,S_sp
+        logical, intent(in) :: full
+
+        integer, target :: i,one
+        integer, pointer :: low
+        integer :: j
+        integer :: n_a,n_b
+        integer :: nnz
+        integer :: row_ptr
+        logical :: support
+
+        double precision :: t_1,t_2
+
+        one = 1
+        if (full) then
+            low => one
+        else
+            low => i
+        end if
+
+        nnz = count_nnz_1p(b_splines,term,full)
+        call H_sp%init([term%n_config,term%n_config],nnz)
+        call S_sp%init([term%n_config,term%n_config],nnz)
+        row_ptr = 1
+        H_sp%index_ptr(1) = 1
+        S_sp%index_ptr(1) = 1
+
+        write(6,*) term%l,term%m,term%pi,term%n_config
+
+        t_1 = omp_get_wtime()
+        do i = 1,term%n_config
+            n_a = term%configs(i)%n(1)
+
+            do j = low,term%n_config
+                n_b = term%configs(j)%n(1)
+
+                support = (abs(n_a-n_b)<b_splines%k)
+
+                if (support) then
+                    H_sp%data(row_ptr) = H(term%l)%data(n_a,n_b)
+                    S_sp%data(row_ptr) = S(n_a,n_b)
+
+                    H_sp%indices(row_ptr) = j
+                    S_sp%indices(row_ptr) = j
+
+                    row_ptr = row_ptr + 1
+                end if
+
+            end do
+            H_sp%index_ptr(i+1) = row_ptr
+            S_sp%index_ptr(i+1) = row_ptr
+        end do
+
+        t_2 = omp_get_wtime()
+        write(6,*) 'Time to construct H_block (s): ', t_2-t_1
+    end subroutine construct_block_1p
+
     function count_nnz(b_splines,term,max_k,full) result(res)
         type(b_spline), intent(in) :: b_splines
         type(sym), intent(in) :: term
@@ -351,6 +414,36 @@ contains
             end do
         end do
     end function count_nnz
+
+    function count_nnz_1p(b_splines,term,full) result(res)
+        type(b_spline), intent(in) :: b_splines
+        type(sym), intent(in) :: term
+        logical, intent(in) :: full
+        integer :: res
+
+        integer, target :: i, one
+        integer, pointer :: low
+        integer :: j
+        integer :: n_a,n_b
+        logical :: support
+
+        one = 1
+        if (full) then
+            low => one
+        else
+            low => i
+        end if
+
+        res = 0
+        do i = 1,term%n_config
+            n_a = term%configs(i)%n(1)
+            do j = low,term%n_config
+                n_b = term%configs(j)%n(1)
+                support = (abs(n_a-n_b)<b_splines%k)
+                if (support) res = res + 1
+            end do
+        end do
+    end function count_nnz_1p
 
     subroutine construct_block_tensor_dense(H_block,H,S_Block,S,b_splines,term,max_k,R_k,full)
         type(block), intent(inout) :: H_block

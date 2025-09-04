@@ -3,6 +3,7 @@ program main_quasienergies
     use constants_tools
     use input_tools
     use dir_tools
+    use bspline_tools, only: b_spline
     use orbital_tools, only: basis
     use sparse_array_tools, only: CSR_matrix
     use block_tools, only: block_CS, block_diag_CS
@@ -16,6 +17,7 @@ program main_quasienergies
     character(len=:), allocatable :: quasi_res_dir
 
     type(basis) :: bas
+    type(b_spline) :: splines
     type(block_diag_CS) :: H_0_block,S_block
     type(block_CS) :: dip(-1:1)
     type(block_CS) :: D
@@ -28,6 +30,7 @@ program main_quasienergies
 
     ! Load basis and matrix elements
     call bas%load(basis_dir)
+    call splines%load(basis_dir)
     call H_0_block%load(basis_dir//"H_diag.dat")
     call S_block%load(basis_dir//"S_diag.dat")
     call dip(-1)%load(basis_dir//"D_-1.dat")
@@ -71,6 +74,7 @@ program main_quasienergies
 
     ! Store information about the actual basis that was used
     call bas%store(quasi_res_dir)
+    call splines%store(quasi_res_dir)
 
     if (calc_type == 'omega') then
         call omega_scan(H_0_block,S_block,D,bas,gs_energy,quasi_res_dir)

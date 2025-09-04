@@ -18,6 +18,7 @@ module input_tools
     character :: gauge
     logical :: z_pol
     logical :: full
+    logical :: two_el
 
     namelist /basis_input/ &
     & basis_output_dir,&
@@ -38,7 +39,8 @@ module input_tools
     & max_k,&
     & gauge,&
     & z_pol,&
-    & full
+    & full, &
+    & two_el
 
     ! Quasienergy input variables
     character(len=:), allocatable :: basis_dir
@@ -117,6 +119,7 @@ module input_tools
     integer, allocatable :: blocks(:)
     integer, allocatable :: n_eigs(:)
     complex(dp), allocatable :: target_energies(:)
+    logical :: store_diag_vecs
 
     namelist /diag_input/ &
     & basis_input_dir,&
@@ -124,7 +127,28 @@ module input_tools
     & n_syms,&
     & blocks,&
     & n_eigs,&
-    & target_energies
+    & target_energies,&
+    & store_diag_vecs
+
+    ! Function evaluation input variables
+    character(len=:), allocatable :: eval_root_dir
+    character(len=64) :: eval_dir
+
+    integer(int32) :: N_r
+    integer(int32) :: N_theta
+    integer(int32) :: N_phi
+    real(dp) :: r_limits(2)
+    real(dp) :: theta_limits(2)
+    real(dp) :: phi_limits(2)
+
+    namelist /eval_input/ &
+    & eval_dir,&
+    & N_r,&
+    & r_limits,&
+    & N_theta,&
+    & theta_limits,&
+    & N_phi,&
+    & phi_limits
 
     integer, private :: i
 contains
@@ -410,6 +434,53 @@ contains
         if (bad_input) call error_bad_input()
     end subroutine get_diag_input
 
+    subroutine get_eval_input(input_file)
+        character(len=*), intent(in) :: input_file
+
+        logical :: bad_input
+
+        open(unit=1,file=input_file,action='read')
+        read(1,nml=eval_input)
+        close(1)
+
+        bad_input = .false.
+
+        eval_root_dir = trim(eval_dir)//'/'
+        if (.not.is_dir(eval_root_dir)) then
+            write(stderr,*)
+            write(stderr,*) "Error! The eval_dir you supplied: ", eval_dir, " does not exist."
+            write(stderr,*) "You need to supply an exisiting directory to the eval_dir variable in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (any(r_limits<0)) then
+            write(stderr,*)
+            write(stderr,*) "Error! Bad r_limits input: ", r_limits
+            write(stderr,*) "You need to supply positive values for r_limits in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (N_r<1) then
+            write(stderr,*)
+            write(stderr,*) "Error! N_r < 1: ", N_r
+            write(stderr,*) "You need to supply N_r >= 1 in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        blocks = blocks(1:n_syms)
+        n_eigs = n_eigs(1:n_syms)
+        target_energies = target_energies(1:n_syms)
+
+        write(stdout,*)
+        write(stdout,*) "Function evaluation input:"
+        write(stdout,nml=eval_input)
+
+        if (bad_input) call error_bad_input()
+    end subroutine get_eval_input
+
     subroutine write_basis_input(res_dir)
         character(len=:), allocatable, intent(in) :: res_dir
 
@@ -458,6 +529,7 @@ contains
         max_k = 4
         z_pol = .true.
         full = .true.
+        two_el = .true.
     end subroutine set_basis_defaults
 
     subroutine set_quasi_defaults()
@@ -495,7 +567,14 @@ contains
         allocate(blocks(n_syms),source = -1)
         allocate(n_eigs(n_syms),source = -1)
         allocate(target_energies(n_syms),source = (0.0_dp,0.0_dp))
+        store_diag_vecs = .false.
     end subroutine set_diag_defaults
+
+    subroutine set_eval_defaults()
+        eval_dir = "-"
+        N_r = 50
+        r_limits = [0.01_dp,10.0_dp]
+    end subroutine set_eval_defaults
 
     subroutine error_bad_input()
         write(stderr,*)

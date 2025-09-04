@@ -23,6 +23,7 @@ module eig_tools
         end function zdotu
     end interface
 
+    integer, parameter :: default_ARPACK_max_iter = 300
     real(dp), parameter :: default_ARPACK_tol = 1e-12_dp
 
     interface drive_ARPACK_SI
@@ -304,7 +305,7 @@ contains
         if (present(max_iter)) then
             max_i = max_iter
         else
-            max_i = 300
+            max_i = default_ARPACK_max_iter
         end if
 
         if (present(tol)) then
@@ -425,7 +426,7 @@ contains
         if (present(max_iter)) then
             max_i = max_iter
         else
-            max_i = 300
+            max_i = default_ARPACK_max_iter
         end if
 
         if (present(tol)) then
@@ -547,7 +548,7 @@ contains
         if (present(max_iter)) then
             max_i = max_iter
         else
-            max_i = 300
+            max_i = default_ARPACK_max_iter
         end if
 
         if (present(tol)) then

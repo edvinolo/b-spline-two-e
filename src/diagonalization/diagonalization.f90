@@ -106,7 +106,8 @@ contains
         character(len=*), intent(in) :: res_dir
         type(basis), intent(in) :: bas
 
-        integer :: i,j,unit
+        integer :: i,j,unit,ptr_1,ptr_2
+        complex(dp), allocatable :: vec(:,:)
         open(file = res_dir//"energies.out", newunit = unit, action = 'write')
 
         do i = 1,n_syms
@@ -133,6 +134,24 @@ contains
         end do
 
         close(unit)
+
+        if (store_diag_vecs) then
+            allocate(vec(bas%n_states,n_syms),source = (0.0_dp,0.0_dp))
+            open(file = res_dir//"vecs.dat", newunit = unit, action = 'write', form = 'unformatted')
+            write(unit) bas%n_states
+            write(unit) n_syms
+            write(unit) 1 !n_calc = 1
+
+            do i = 1,n_syms
+                j = blocks(i)
+                ptr_1 = bas%sym_ptr(j)
+                ptr_2 = bas%sym_ptr(j+1)-1
+                vec(ptr_1:ptr_2,i) = results(i)%vecs(:,1)
+            end do
+
+            write(unit) vec
+            close(unit)
+        end if
     end subroutine write_res
 
 end module diagonalization

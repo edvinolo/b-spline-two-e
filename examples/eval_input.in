@@ -1,0 +1,5 @@
+&eval_input
+eval_dir = 'quasi_output/0001'
+N_r = 100
+r_limits = 1.0d-3,1.0d1
+/
