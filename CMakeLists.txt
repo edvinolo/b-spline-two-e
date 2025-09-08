@@ -34,6 +34,12 @@ else()
     add_compile_options(-O3 -march=native)
 endif()
 
+# Enable address sanitizer for gcc
+if (CMAKE_USE_ASAN)
+        add_compile_options(-fsanitize=address)
+        add_link_options(-fsanitize=address)
+endif()
+
 # Tell MKL to use 32-bit integer interface
 # set(MKL_INTERFACE lp64)
 

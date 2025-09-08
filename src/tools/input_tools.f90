@@ -79,6 +79,7 @@ module input_tools
     logical :: use_essential_states
     integer :: n_ess
     integer, allocatable :: target_blocks(:)
+    integer, allocatable :: target_Floquet_blocks(:)
     complex(dp), allocatable :: targets(:)
 
     logical :: calc_H_eff
@@ -107,6 +108,7 @@ module input_tools
     & use_essential_states,&
     & n_ess,&
     & target_blocks,&
+    & target_Floquet_blocks,&
     & targets,&
     & calc_H_eff
 
@@ -281,7 +283,7 @@ contains
         if (any(calc_param<0)) then
             write(stderr,*)
             write(stderr,*) "Error! The calc_param not set: ", calc_param
-            write(stderr,*) "You need to supply an positive calc_param in the input file"
+            write(stderr,*) "You need to supply a positive calc_param in the input file"
             write(stderr,*)
             bad_input = .true.
         end if
@@ -289,7 +291,7 @@ contains
         if (other_param<0) then
             write(stderr,*)
             write(stderr,*) "Error! The other_param not set: ", other_param
-            write(stderr,*) "You need to supply an positive other_param in the input file"
+            write(stderr,*) "You need to supply a positive other_param in the input file"
             write(stderr,*)
             bad_input = .true.
         end if
@@ -368,6 +370,7 @@ contains
 
         if (use_essential_states) then
             target_blocks = target_blocks(:n_ess)
+            target_Floquet_blocks = target_Floquet_blocks(:n_ess)
             targets = targets(:n_ess)
         end if
 
@@ -556,6 +559,7 @@ contains
         use_essential_states = .false.
         n_ess = 200
         allocate(target_blocks(n_ess),source = -1)
+        allocate(target_Floquet_blocks(n_ess),source = 0)
         allocate(targets(n_ess),source = (0.0_dp,0.0_dp))
         calc_H_eff = .false.
     end subroutine set_quasi_defaults

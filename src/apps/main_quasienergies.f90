@@ -10,7 +10,7 @@ program main_quasienergies
     use quasi_floquet
     use quasi_circ
     use quasi_calcs
-    use essential_states, only: setup_essential_states, find_essential_states
+    use essential_states, only: setup_essential_states, setup_Floquet_essential_states, find_essential_states
     implicit none
 
     character(len=:), allocatable :: input_file
@@ -43,14 +43,18 @@ program main_quasienergies
     call write_quasi_input(quasi_res_dir)
 
     ! Setup the structure of the interaction matrix D (to be multiplied by field strength to get true interaction V)
-    if (z_pol) then
-        !call setup_dip_floquet(dip(0),D,gauge,n_blocks,bas)
-    else
+    if (z_pol.and.(calc_type/='static')) then
+        call setup_dip_floquet(dip(0),D)
+    else if (.not.z_pol) then
         call setup_dip_circ(dip,D,gauge)
     end if
 
     if (use_essential_states) then
-        call setup_essential_states(ess_states,n_ess,target_blocks,bas)
+        if (z_pol.and.(calc_type/='static')) then
+            call setup_Floquet_essential_states(ess_states,n_ess,target_blocks,n_blocks,target_Floquet_blocks,bas)
+        else
+            call setup_essential_states(ess_states,n_ess,target_blocks,bas)
+        end if
         call find_essential_states(ess_states,n_ess,targets,H_0_block,S_block)
     end if
 
