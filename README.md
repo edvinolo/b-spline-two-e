@@ -4,7 +4,7 @@ The radial part of the wavefunctions are represented using B-splines.
 
 ## Requirements
 The currently supported compilers are
-- Gfortran 10+
+- gfortran 10+
   
 The program needs the following external libraries
 - The GNU Scientific Library (GSL) https://www.gnu.org/software/gsl/
