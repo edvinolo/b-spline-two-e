@@ -1,5 +1,6 @@
 module block_tools
     use sparse_array_tools, only: CSR_matrix
+    use iso_fortran_env, only: stdout => output_unit, stderr => error_unit
     implicit none
 
     type, public :: block
@@ -123,11 +124,11 @@ contains
 
         this%shape = 0
         do i = 1, this%block_shape(1)
-            this%shape(1) = this%shape(1) + this%blocks(i,1)%shape(1)
+            this%shape(1) = this%shape(1) + this%blocks(i,i)%shape(1)
         end do
 
         do i = 1, this%block_shape(2)
-            this%shape(2) = this%shape(2) + this%blocks(1,i)%shape(2)
+            this%shape(2) = this%shape(2) + this%blocks(i,i)%shape(2)
         end do
     end subroutine compute_shape_block_CS
 
@@ -159,8 +160,10 @@ contains
         end do
 
         call blocks%compute_shape()
-        if ((CS%nnz /= nnz).or.(any(CS%shape /= blocks%shape))) then
-            if (CS%arrays_allocated()) call CS%deall()
+        if (.not.CS%arrays_allocated()) then
+            call CS%init(blocks%shape,nnz)
+        else if ((CS%nnz /= nnz).or.(any(CS%shape /= blocks%shape))) then
+            call CS%deall()
             call CS%init(blocks%shape,nnz)
         end if
 
@@ -177,6 +180,7 @@ contains
         end if
     end subroutine CS_from_block
 
+    ! This does not work in general if all block shapes are not set correctly!!!!!!
     subroutine CSR_from_block(blocks,CS)
         class(block_CS), intent(inout) :: blocks
         type(CSR_matrix), intent(inout) :: CS
@@ -209,8 +213,14 @@ contains
         CS%index_ptr(row+1) = ptr
 
         if (CS%index_ptr(CS%shape(1)+1) /= CS%nnz+1) then
-            write(6,*) "Error in CSR from block assembly, index_ptr(N_rows+1) /= nnz + 1"
-            write(6,*) CS%index_ptr(CS%shape(1)+1), CS%nnz+1
+            write(stderr,*) "Error in CSR from block assembly, index_ptr(N_rows+1) /= nnz + 1"
+            write(stderr,*) CS%index_ptr(CS%shape(1)+1), CS%nnz+1
+            stop
+        end if
+
+        if (any(CS%indices > CS%shape(2))) then
+            write(stderr,*) "Error in CSR from block assembly, CS%indices > CS%shape(2))"
+            write(stderr,*) maxval(CS%indices), CS%shape(2)
             stop
         end if
 
@@ -269,8 +279,10 @@ contains
         end do
 
         call blocks%compute_shape()
-        if ((CS%nnz /= nnz).or.(any(CS%shape /= blocks%shape))) then
-            if (CS%arrays_allocated()) call CS%deall()
+        if (.not.CS%arrays_allocated()) then
+            call CS%init(blocks%shape,nnz)
+        else if ((CS%nnz /= nnz).or.(any(CS%shape /= blocks%shape))) then
+            call CS%deall()
             call CS%init(blocks%shape,nnz)
         end if
 
@@ -317,7 +329,13 @@ contains
         CS%index_ptr(row+1) = ptr
 
         if (CS%index_ptr(CS%shape(1)+1) /= CS%nnz+1) then
-            write(6,*) "Error in CSR from block assembly, index_ptr(N_rows+1) /= nnz + 1"
+            write(stderr,*) "Error in CSR from block assembly, index_ptr(N_rows+1) /= nnz + 1"
+            stop
+        end if
+
+        if (any(CS%indices > CS%shape(2))) then
+            write(stderr,*) "Error in CSR from block assembly, CS%indices > CS%shape(2))"
+            write(stderr,*) maxval(CS%indices), CS%shape(2)
             stop
         end if
     end subroutine CSR_from_block_diag
@@ -406,8 +424,8 @@ contains
         if (type == 'CSR') then
             call this%init(block_shape)
         else
-            write(6,*) "Error! Only CSR blocks are implemented."
-            write(6,*) type
+            write(stderr,*) "Error! Only CSR blocks are implemented."
+            write(stderr,*) type
             stop
         end if
         this%shape = shape
@@ -476,8 +494,8 @@ contains
         if (type == 'CSR') then
             call this%init(block_shape(1))
         else
-            write(6,*) "Error! Blocks must be CSR!"
-            write(6,*) type
+            write(stderr,*) "Error! Blocks must be CSR!"
+            write(stderr,*) type
             stop
         end if
         this%shape = shape
@@ -534,7 +552,7 @@ contains
         integer :: i,j
 
         if (any(X%block_shape /= Y%block_shape)) then
-            write(6,*) "Error in CS_diag_X_P_A_block_Y! Incompatible block shapes"
+            write(stderr,*) "Error in CS_diag_X_P_A_block_Y! Incompatible block shapes"
             stop
         end if
 
@@ -564,7 +582,7 @@ contains
         integer :: i,j
 
         if (any(X%block_shape /= Y%block_shape)) then
-            write(6,*) "Error in CS_A_block_X_P_B_block_Y! Incompatible block shapes"
+            write(stderr,*) "Error in CS_A_block_X_P_B_block_Y! Incompatible block shapes"
             stop
         end if
 
@@ -593,7 +611,7 @@ contains
         integer :: i
 
         if (X%block_shape(1) /= size(alpha)) then
-            write(6,*) "Error in CS_A_P_diag_X! Incompatible block and alpha shapes"
+            write(stderr,*) "Error in CS_A_P_diag_X! Incompatible block and alpha shapes"
             stop
         end if
 
@@ -611,7 +629,7 @@ contains
         integer :: i
 
         if (X%block_shape(1) /= size(alpha)) then
-            write(6,*) "Error in CS_A_P_block_X! Incompatible block and alpha shapes"
+            write(stderr,*) "Error in CS_A_P_block_X! Incompatible block and alpha shapes"
             stop
         end if
 
@@ -630,7 +648,7 @@ contains
         integer :: i
 
         if (X%block_shape(1) /= size(alpha)) then
-            write(6,*) "Error in CS_A_diag_B_P_diag_X! Incompatible block and alpha shapes"
+            write(stderr,*) "Error in CS_A_diag_B_P_diag_X! Incompatible block and alpha shapes"
             stop
         end if
 
@@ -649,7 +667,7 @@ contains
         integer :: i
 
         if (X%block_shape(1) /= size(alpha)) then
-            write(6,*) "Error in CS_A_diag_B_P_block_X! Incompatible block and alpha shapes"
+            write(stderr,*) "Error in CS_A_diag_B_P_block_X! Incompatible block and alpha shapes"
             stop
         end if
 
@@ -668,12 +686,12 @@ contains
         integer :: i,j
 
         if (any(X%block_shape /= shape(alpha))) then
-            write(6,*) "Error in CS_A_block_B_P_block_X! Incompatible block and alpha shapes"
+            write(stderr,*) "Error in CS_A_block_B_P_block_X! Incompatible block and alpha shapes"
             stop
         end if
 
         if (any(X%block_shape /= B%block_shape)) then
-            write(6,*) "Error in CS_A_block_B_P_block_X! Incompatible block and alpha shapes"
+            write(stderr,*) "Error in CS_A_block_B_P_block_X! Incompatible block and alpha shapes"
             stop
         end if
 
