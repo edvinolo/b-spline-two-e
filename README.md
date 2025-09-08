@@ -9,7 +9,7 @@ The currently supported compilers are
 The program needs the following external libraries
 - The GNU Scientific Library (GSL) https://www.gnu.org/software/gsl/
 - Intel MKL (can be installed as part of their Fortran essentials package)
-- The Fortran standard (with support for ilp64) library https://github.com/fortran-lang/stdlib
+- The Fortran standard library (with support for ilp64) https://github.com/fortran-lang/stdlib
 - ARPACK-NG (Note, ARPACK-NG should be built with ilp64 support, see their README on instructions how) https://github.com/opencollab/arpack-ng
 - FEAST (optional, currently not used for any of the main programs) https://www.feast-solver.org/index.htm
 
