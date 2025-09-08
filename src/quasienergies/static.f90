@@ -11,7 +11,7 @@ contains
         type(basis), intent(in) :: bas
         type(block_diag_CS), intent(in) ::  H_0
         type(block_diag_CS), intent(in) :: S
-        type(block_CS) :: D
+        type(block_CS), intent(in) :: D
         complex(dp), intent(in) :: shift
         real(dp), intent(in) :: V_0
 

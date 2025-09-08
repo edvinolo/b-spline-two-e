@@ -26,12 +26,18 @@ module essential_states
         complex(dp) :: energy
         integer :: ptr(2)
     contains
-        procedure :: set_pointers
+        procedure :: set_pointers => set_regular_pointers
         procedure :: projection
     end type essential_state
 
+    type, extends(essential_state), public :: Floquet_essential_state
+        integer :: Floquet_block
+    contains
+        procedure :: set_pointers => set_Floquet_pointers
+    end type Floquet_essential_state
+
 contains
-    subroutine set_pointers(this,bas)
+    subroutine set_regular_pointers(this,bas)
         class(essential_state), intent(inout) :: this
         type(basis), intent(in) :: bas
 
@@ -46,7 +52,25 @@ contains
         p_2 = p_1 + bas%syms(this%block)%n_config - 1
 
         this%ptr = [p_1,p_2]
-    end subroutine set_pointers
+    end subroutine set_regular_pointers
+
+    subroutine set_Floquet_pointers(this,bas)
+        class(Floquet_essential_state), intent(inout) :: this
+        type(basis), intent(in) :: bas
+
+        integer :: i,p_1,p_2,n
+
+        n = bas%n_states
+        p_1 = (this%Floquet_block-1)*n + 1
+
+        do i = 1, this%block-1
+            p_1 = p_1 + bas%syms(i)%n_config
+        end do
+
+        p_2 = p_1 + bas%syms(this%block)%n_config - 1
+
+        this%ptr = [p_1,p_2]
+    end subroutine set_Floquet_pointers
 
     function projection(this,vec,S,full) result(res)
         class(essential_state), intent(in) :: this
@@ -71,14 +95,14 @@ contains
     end function projection
 
     subroutine setup_essential_states(states,n_ess,target_blocks,bas)
-        type(essential_state), allocatable, intent(inout) :: states(:)
+        class(essential_state), allocatable, intent(inout) :: states(:)
         integer, intent(in) :: n_ess
         integer, intent(in) :: target_blocks(n_ess)
         type(basis) :: bas
 
         integer :: i
 
-        allocate(states(n_ess))
+        allocate(essential_state :: states(n_ess))
 
         do i = 1,n_ess
             states(i)%block = target_blocks(i)
@@ -86,8 +110,33 @@ contains
         end do
     end subroutine setup_essential_states
 
+    subroutine setup_Floquet_essential_states(states,n_ess,target_blocks,n_blocks,target_Floquet_blocks,bas)
+        class(essential_state), allocatable, intent(inout) :: states(:)
+        integer, intent(in) :: n_ess
+        integer, intent(in) :: target_blocks(n_ess)
+        integer, intent(in) :: n_blocks(2)
+        integer, intent(in) :: target_Floquet_blocks(n_ess)
+        type(basis) :: bas
+
+        integer :: i
+
+        allocate(Floquet_essential_state :: states(n_ess))
+
+        select type (states)
+        type is (Floquet_essential_state)
+            do i = 1,n_ess
+                states(i)%block = target_blocks(i)
+                states(i)%Floquet_block = target_Floquet_blocks(i) + n_blocks(1) + 1
+                call states(i)%set_pointers(bas)
+            end do
+        class default
+            write(stderr,*) "Essential state type must be Floquet_essential_state in setup_Floquet_essential_states"
+            error stop
+        end select
+    end subroutine setup_Floquet_essential_states
+
     subroutine find_essential_states(states,n_ess,targets,H_0_block,S_Block)
-        type(essential_state), intent(inout) :: states(n_ess)
+        class(essential_state), intent(inout) :: states(n_ess)
         integer, intent(in) :: n_ess
         complex(dp), intent(in) :: targets(n_ess)
         type(block_diag_CS), intent(in) :: H_0_block

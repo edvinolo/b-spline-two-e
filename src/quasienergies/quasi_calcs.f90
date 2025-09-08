@@ -2,7 +2,7 @@ module quasi_calcs
     use kind_tools
     use constants_tools
     use stdlib_math, only: linspace, logspace
-    use sparse_array_tools, only: CSR_matrix
+    use sparse_array_tools, only: CSR_matrix,CSR_mv,CSR_mv_sym
     use block_tools, only: block_CS, block_diag_CS
     use orbital_tools
     use input_tools
@@ -49,7 +49,7 @@ module quasi_calcs
     complex(dp), allocatable :: eigs_i(:)
     complex(dp), allocatable :: vecs_i(:,:)
     complex(dp), allocatable :: ess_projs(:,:,:)
-    type(essential_state), allocatable :: ess_states(:)
+    class(essential_state), allocatable :: ess_states(:)
     complex(dp), allocatable :: H_eff(:,:,:)
 
     ! Timing variables
@@ -83,7 +83,7 @@ contains
         call allocate_result(bas)
         if (track_proj) call allocate_temp_results()
 
-        call S_block%to_CS(S,.false.)
+        call setup_S(S_block)
 
         do i = 1,n_calc
             call print_params(i,intensity,omega(i),shift)
@@ -120,7 +120,7 @@ contains
         call allocate_result(bas)
         if (track_proj) call allocate_temp_results()
 
-        call S_block%to_CS(S,.false.)
+        call setup_S(S_block)
 
         do i = 1,n_calc
             call print_params(i,intensity(i),omega,shift)
@@ -157,7 +157,7 @@ contains
         call allocate_result(bas)
         if (track_proj) call allocate_temp_results()
 
-        call S_block%to_CS(S,.false.)
+        call setup_S(S_block)
 
         do i = 1,n_calc
             call print_params(i,intensity(i),omega,shift)
@@ -194,7 +194,7 @@ contains
         call allocate_result(bas)
         call allocate_temp_results()
 
-        call S_block%to_CS(S,.false.)
+        call setup_S(S_block)
 
         do i = 1,n_calc
             V_0 = field_strength(intensity,omega(i))
@@ -242,7 +242,7 @@ contains
         call allocate_result(bas)
         call allocate_temp_results()
 
-        call S_block%to_CS(S,.false.)
+        call setup_S(S_block)
 
         do i = 1,n_calc
             V_0 = field_strength(intensity(i),omega)
@@ -286,7 +286,7 @@ contains
             if (calc_type == 'static') then
                 call setup_H_static(H_block, bas, H_0, S_block, D, shift_i, V_0_i)
             else
-            ! H_0_shift = setup_H_0_floquet()
+                call setup_H_floquet(H_block, bas, H_0, S_block, D, omega_i, shift_i, V_0_i)
             end if
         else
             call setup_H_circ(H_block, bas, H_0, S_block, D, omega_i, shift_i, V_0_i)
@@ -417,21 +417,30 @@ contains
         allocate(eigs_i(n_temp),vecs_i(n_states,n_temp))
     end subroutine allocate_temp_results
 
+    subroutine setup_S(S_Block)
+        type(block_diag_CS), intent(inout) :: S_block
+
+        if (z_pol.and.(calc_type /= 'static')) then
+            call setup_S_floquet(S_block,S)
+        else
+            call S_block%to_CS(S,.false.)
+        end if
+    end subroutine setup_S
+
     function compute_dim(bas) result(res)
         type(basis), intent(in) :: bas
         integer :: res
 
         res = 0
         if (z_pol) then
-            !TODO
             if (calc_type == 'static') then
                 res = sum(bas%syms%n_config)
+            else
+                res = sum(bas%syms%n_config)*(n_blocks(1) + n_blocks(2) + 1)
             end if
         else
             res = sum(bas%syms%n_config)
         end if
-
-
     end function compute_dim
 
     subroutine write_results(res_dir,parameter,parameter_vec)
