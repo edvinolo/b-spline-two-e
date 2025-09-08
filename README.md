@@ -1,5 +1,5 @@
 # b-spline-two-e
-A program that computes matrix elements for one- and two-electron atoms in the non-relativistic dipole approximation (including the singlet approximation)
+A program that computes matrix elements for one- and two-electron atoms in the non-relativistic and dipole approximations (including the singlet approximation)
 The radial part of the wavefunctions are represented using B-splines.
 
 ## Requirements
@@ -37,7 +37,7 @@ Once you have cloned the repository, do the following:
 A shell script for building the program and its prerequisites on AWS-Linux 2023 can be found in ```utils/install_bs2e_aws_linux_2023.sh```
 
 ## Turn on debug build
-In the build directory run cmake with the debug-flag set
+In the build directory run cmake with the debug flag set
 ```
 cmake -DCMAKE_BUILD_TYPE=debug ..
 ```
@@ -55,7 +55,7 @@ when you run CMake.
   - ```feval``` Evaluate one-particle wavefunction or the electron density from a given state vector.
 
 ### How to run 
-There are example input files located in the ```examples``` directory
+There are example input files located in the ```examples``` directory.
 To run e.g. ```basis_setup```, run 
 ```
 /path/to/build/bin/basis_setup /path/to/basis_setup.in
