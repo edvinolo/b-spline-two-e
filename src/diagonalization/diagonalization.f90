@@ -7,7 +7,7 @@ module diagonalization
     use sparse_array_tools, only: CSR_matrix
     use block_tools, only: block_diag_CS
     use PARDISO_tools, only: PARDISO_solver
-    use eig_tools, only: drive_ARPACK_SI,sort_eig
+    use eig_tools, only: drive_ARPACK_SI,sort_eig,sort_eig_target
     implicit none
 
     type, public :: eig_results
@@ -72,23 +72,33 @@ contains
 
         complex(dp) :: temp_eig(2)
         complex(dp), allocatable :: temp_vec(:,:)
+        logical, parameter :: sort_target = .true.
         integer, parameter :: n_energies = 2
 
         allocate(vec(H%shape(1)), temp_vec(H%shape(1),n_energies))
 
-        call diag_block(H,S,target,n_energies,temp_eig,temp_vec)
+        call diag_block(H,S,target,n_energies,temp_eig,temp_vec,sort_target)
 
         eig = temp_eig(1)
         vec = temp_vec(:,1)
     end subroutine do_diag_essential
 
-    subroutine diag_block(H,S,target,n_energies,energies,vectors)
+    subroutine diag_block(H,S,target,n_energies,energies,vectors,sort_target)
         type(CSR_matrix), intent(in) :: H
         type(CSR_matrix), intent(in) :: S
         complex(dp), intent(in) :: target
         integer, intent(in) :: n_energies
         complex(dp), intent(out) :: energies(:)
         complex(dp), intent(out) :: vectors(:,:)
+        logical, intent(in), optional :: sort_target
+
+        logical :: target_sort
+
+        if (present(sort_target)) then
+            target_sort = sort_target
+        else
+            target_sort = .false.
+        end if
 
         H_i = H
         call H_i%shift_B(-target,S)
@@ -97,7 +107,12 @@ contains
         call solver%factor(H_i%data,H_i%index_ptr,H_i%indices)
 
         call drive_ARPACK_SI(H_i, solver, S, full, target, n_energies, energies, vectors)
-        call sort_eig(n_energies,energies,vectors)
+
+        if (target_sort) then
+            call sort_eig_target(n_energies,energies,vectors,target)
+        else
+            call sort_eig(n_energies,energies,vectors)
+        end if
 
         call solver%cleanup()
     end subroutine diag_block

@@ -123,19 +123,37 @@ contains
     ! Sort eigenvalues and eigenvector based on the real part of the eigenvalues
     subroutine sort_eig(n_b,eigs,vecs)
         integer, intent(in) :: n_b
-        double complex, dimension(n_b), intent(inout) :: eigs
-        double complex, dimension(:,:), intent(inout) ::  vecs
+        complex(dp), dimension(n_b), intent(inout) :: eigs
+        complex(dp), dimension(:,:), intent(inout) ::  vecs
 
         integer, dimension(n_b) :: index
-        double precision, dimension(n_b) :: eigs_real
+        real(dp), dimension(n_b) :: eigs_real
 
-        eigs_real = real(eigs)
+        eigs_real = real(eigs,kind=dp)
 
         call sort_index(eigs_real,index)
 
         eigs = eigs(index)
         vecs = vecs(:,index)
     end subroutine sort_eig
+
+    ! Sort eigenvalues and eigenvector based on the distance from target
+    subroutine sort_eig_target(n_b,eigs,vecs,target)
+        integer, intent(in) :: n_b
+        complex(dp), dimension(n_b), intent(inout) :: eigs
+        complex(dp), dimension(:,:), intent(inout) ::  vecs
+        complex(dp), intent(in) :: target
+
+        integer, dimension(n_b) :: index
+        real(dp), dimension(n_b) :: eigs_real
+
+        eigs_real = abs(eigs-target)
+
+        call sort_index(eigs_real,index)
+
+        eigs = eigs(index)
+        vecs = vecs(:,index)
+    end subroutine sort_eig_target
 
 #if defined(WITH_FEAST)
     subroutine FEAST(A,B,sym,full,mid,rad,eigs,vecs,M,max_tries)
