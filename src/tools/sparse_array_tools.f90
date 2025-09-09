@@ -1051,24 +1051,27 @@ contains
             return
         end if
 
-        !$omp parallel private(j)
-        !$omp do
-        do i = 1,A%shape(1)
-            y(i) = 0.0_dp
-            do j = A%index_ptr(i),A%index_ptr(i+1)-1
-                y(i) = y(i) + A%data(j)*x(A%indices(j))
-            end do
-        end do
-        !$omp end do
+        call mkl_zcsrsymv('U',A%shape(1),A%data,A%index_ptr,A%indices,x,y)
 
-        !$omp do reduction(+:y)
-        do i = 1,A%shape(1)
-            do j = A%index_ptr(i)+1,A%index_ptr(i+1)-1
-                y(A%indices(j)) = y(A%indices(j)) + A%data(j)*x(i)
-            end do
-        end do
-        !$omp end do
-        !$omp end parallel
+        ! This is correct, but for large problems the omp reduction clause runs into stack problems
+        ! !$omp parallel private(j)
+        ! !$omp do
+        ! do i = 1,A%shape(1)
+        !     y(i) = 0.0_dp
+        !     do j = A%index_ptr(i),A%index_ptr(i+1)-1
+        !         y(i) = y(i) + A%data(j)*x(A%indices(j))
+        !     end do
+        ! end do
+        ! !$omp end do
+
+        ! !$omp do reduction(+:y)
+        ! do i = 1,A%shape(1)
+        !     do j = A%index_ptr(i)+1,A%index_ptr(i+1)-1
+        !         y(A%indices(j)) = y(A%indices(j)) + A%data(j)*x(i)
+        !     end do
+        ! end do
+        ! !$omp end do
+        ! !$omp end parallel
     end subroutine CSR_mv_sym
 
     subroutine CSR_dsymv(n,a,ia,ja,alpha,x,beta,y)

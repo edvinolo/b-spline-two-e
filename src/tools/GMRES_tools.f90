@@ -7,6 +7,8 @@ module GMRES_tools
     use omp_lib, only: omp_get_wtime
     implicit none
 
+    real(dp), allocatable :: x_r(:),x_i(:),y_r(:),y_i(:),temp(:)
+
     type, public :: zFGMRES
         integer :: n
         procedure(mv_GMRES), pointer :: mv
@@ -84,6 +86,7 @@ module GMRES_tools
 
             if (.not.allocated(this%x_work)) then
                 allocate(this%x_work(2*this%n),this%b_work(2*this%n),this%dwork(2*this%n),this%zwork(2*this%n))
+                allocate(x_r(this%n),x_i(this%n),y_r(this%n),y_i(this%n),temp(this%n))
             end if
         end subroutine setup_zFGMRES
 
@@ -112,7 +115,7 @@ module GMRES_tools
             real(dp), intent(in) :: x(:)
             real(dp), intent(out) :: y(:)
 
-            integer :: i,j
+            ! integer :: i,j
             ! real(dp), allocatable :: x_r(:),x_i(:),y_r(:),y_i(:),temp(:)
 
             associate(n => this%n)
@@ -122,6 +125,9 @@ module GMRES_tools
             ! x_r = x(1:n)
             ! x_i = x(n+1:)
 
+            call dcopy(n,x(1:n),1,x_r,1)
+            call dcopy(n,x(n+1:),1,x_i,1)
+
             ! ! Real part y_r = a*x_r - b*x_i
             ! call CSR_dsymv(n,this%a,this%ia,this%ja,1.0_dp,x(1:n),0.0_dp,y(1:n))
             ! call CSR_dsymv(n,this%b,this%ia,this%ja,-1.0_dp,x(n+1:),1.0_dp,y(1:n))
@@ -130,42 +136,46 @@ module GMRES_tools
             ! call CSR_dsymv(n,this%b,this%ia,this%ja,1.0_dp,x(1:n),0.0_dp,y(n+1:))
             ! call CSR_dsymv(n,this%a,this%ia,this%ja,1.0_dp,x(n+1:),1.0_dp,y(n+1:))
 
-            ! call mkl_dcsrsymv('U',n,this%a,this%ia,this%ja,x_r,y_r)
-            ! call mkl_dcsrsymv('U',n,this%b,this%ia,this%ja,x_i,temp)
+            call mkl_dcsrsymv('U',n,this%a,this%ia,this%ja,x_r,y_r)
+            call mkl_dcsrsymv('U',n,this%b,this%ia,this%ja,x_i,temp)
             ! y_r = y_r - temp
+            call daxpy(n,-1.0_dp,temp,1,y_r,1)
 
-            ! call mkl_dcsrsymv('U',n,this%a,this%ia,this%ja,x_i,y_i)
-            ! call mkl_dcsrsymv('U',n,this%b,this%ia,this%ja,x_r,temp)
+            call mkl_dcsrsymv('U',n,this%a,this%ia,this%ja,x_i,y_i)
+            call mkl_dcsrsymv('U',n,this%b,this%ia,this%ja,x_r,temp)
             ! y_i = y_i + temp
+            call daxpy(n,1.0_dp,temp,1,y_i,1)
 
             ! y(1:n) = y_r
             ! y(n+1:) = y_i
+            call dcopy(n,y_r,1,y(1:n),1)
+            call dcopy(n,y_i,1,y(n+1:),1)
 
-            !$omp parallel private(j)
-            !$omp do
-            do i = 1,n
-                y(i) = 0
-                y(n+i) = 0
-                do j = this%ia(i),this%ia(i+1)-1
-                    y(i) = y(i) + this%a(j)*x(this%ja(j)) - this%b(j)*x(n+this%ja(j))
-                    ! y(i) = y(i) - this%b(j)*x(n+this%ja(j))
-                    y(n+i) = y(n+i) + this%a(j)*x(n+this%ja(j)) + this%b(j)*x(this%ja(j))
-                    ! y(n+i) = y(n+i) + this%b(j)*x(this%ja(j))
-                end do
-            end do
-            !$omp end do
+            ! !$omp parallel private(j)
+            ! !$omp do
+            ! do i = 1,n
+            !     y(i) = 0
+            !     y(n+i) = 0
+            !     do j = this%ia(i),this%ia(i+1)-1
+            !         y(i) = y(i) + this%a(j)*x(this%ja(j)) - this%b(j)*x(n+this%ja(j))
+            !         ! y(i) = y(i) - this%b(j)*x(n+this%ja(j))
+            !         y(n+i) = y(n+i) + this%a(j)*x(n+this%ja(j)) + this%b(j)*x(this%ja(j))
+            !         ! y(n+i) = y(n+i) + this%b(j)*x(this%ja(j))
+            !     end do
+            ! end do
+            ! !$omp end do
 
-            !$omp do reduction(+:y)
-            do i = 1,n
-                do j = this%ia(i)+1,this%ia(i+1)-1
-                    y(this%ja(j)) = y(this%ja(j)) + this%a(j)*x(i) - this%b(j)*x(n+i)
-                    ! y(this%ja(j)) = y(this%ja(j)) - this%b(j)*x(n+i)
-                    y(n+this%ja(j)) = y(n+this%ja(j)) + this%a(j)*x(n+i) + this%b(j)*x(i)
-                    ! y(n+this%ja(j)) = y(n+this%ja(j)) + this%b(j)*x(i)
-                end do
-            end do
-            !$omp end do
-            !$omp end parallel
+            ! !$omp do reduction(+:y)
+            ! do i = 1,n
+            !     do j = this%ia(i)+1,this%ia(i+1)-1
+            !         y(this%ja(j)) = y(this%ja(j)) + this%a(j)*x(i) - this%b(j)*x(n+i)
+            !         ! y(this%ja(j)) = y(this%ja(j)) - this%b(j)*x(n+i)
+            !         y(n+this%ja(j)) = y(n+this%ja(j)) + this%a(j)*x(n+i) + this%b(j)*x(i)
+            !         ! y(n+this%ja(j)) = y(n+this%ja(j)) + this%b(j)*x(i)
+            !     end do
+            ! end do
+            ! !$omp end do
+            ! !$omp end parallel
 
             end associate
         end subroutine symv_zFGMRES
