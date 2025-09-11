@@ -8,7 +8,7 @@ module quasi_calcs
     use input_tools
     use PARDISO_tools, only: PARDISO_solver
     use ILU0_tools, only: ILU0
-    use precond_tools, only: block_PC,block_PQ_PC,block_Jacobi_PC
+    use precond_tools, only: block_PC,block_PQ_PC,block_Jacobi_PC, block_Jacobi_sp_PC
     use GMRES_tools, only: zFGMRES
 #if defined(WITH_FEAST)
     use eig_tools, only: drive_ARPACK_SI, FEAST
@@ -298,6 +298,8 @@ contains
                     allocate(block_PQ_PC :: precond)
                 else if (block_precond_type == 'Jacobi') then
                     allocate(block_Jacobi_PC :: precond)
+                else if (block_precond_type == 'Jacobi_sp') then
+                    allocate(block_Jacobi_sp_PC :: precond)
                 else
                     write(stderr,*) ""
                     write(stderr,'(a,a)') "Error in Block_PC setup, unknown block_precond_type: ", block_precond_type

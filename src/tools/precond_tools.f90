@@ -2,7 +2,7 @@ module precond_tools
     use kind_tools
     use sparse_array_tools
     use block_tools
-    use PARDISO_tools, only: PARDISO_solver
+    use PARDISO_tools, only: PARDISO_solver, PARDISO_solver_sp
     use ILU0_tools, only: ILU0
     use Jacobi_tools, only: Jacobi
     use input_tools, only: n_precond,n_relevant,couple_pq
@@ -73,13 +73,19 @@ module precond_tools
         integer :: n
         type(block_diag_CS) :: H_0_block
         type(CSR_matrix) :: H_0
-        type(PARDISO_solver) :: solv
+        class(PARDISO_solver), allocatable :: solv
     contains
         procedure :: setup => setup_block_Jacobi_PC
         procedure :: update => update_block_Jacobi_PC
         procedure :: solve => solve_block_Jacobi_PC
         procedure :: cleanup => cleanup_block_Jacobi_PC
     end type block_Jacobi_PC
+
+    type, extends(block_Jacobi_PC), public :: block_Jacobi_sp_PC
+    contains
+        procedure :: setup => setup_block_Jacobi_sp_PC
+    end type block_Jacobi_sp_PC
+
 contains
     subroutine setup_block_PQ_PC(this,H)
         class(block_PQ_PC), intent(inout) :: this
@@ -282,9 +288,24 @@ contains
         ! Set scalar components
         this%n = H%block_shape(1)
 
+        allocate(PARDISO_solver :: this%solv)
+
         ! Do first factorization
         call this%update(H,first_in=.true.)
     end subroutine setup_block_Jacobi_PC
+
+    subroutine setup_block_Jacobi_sp_PC(this,H)
+        class(block_Jacobi_sp_PC), intent(inout) :: this
+        type(block_CS), intent(in) :: H
+
+        ! Set scalar components
+        this%n = H%block_shape(1)
+
+        allocate(PARDISO_solver_sp :: this%solv)
+
+        ! Do first factorization
+        call this%update(H,first_in=.true.)
+    end subroutine setup_block_Jacobi_sp_PC
 
     subroutine update_block_Jacobi_PC(this,H,first_in)
         class(block_Jacobi_PC), intent(inout) :: this

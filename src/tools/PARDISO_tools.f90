@@ -18,14 +18,24 @@ module PARDISO_tools
         procedure :: cleanup => PARDISO_cleanup
     end type PARDISO_solver
 
+    type, extends(PARDISO_solver), public :: PARDISO_solver_sp
+        complex(sp), allocatable :: a(:)
+        complex(sp), allocatable :: x(:)
+        complex(sp), allocatable :: b(:)
+        complex(sp):: sdum(1) ! dummy complex single array
+        contains
+        procedure :: setup => PARDISO_setup_sp
+        procedure :: factor => PARDISO_factor_sp
+        procedure :: solve => PARDISO_solve_sp
+        procedure :: cleanup => PARDISO_cleanup_sp
+    end type PARDISO_solver_sp
+
 contains
-    subroutine PARDISO_setup(this,n,nnz,a,ia,ja)
+    subroutine PARDISO_set_params(this,n,nnz,use_sp)
         class(PARDISO_solver), intent(inout) :: this
         integer, intent(in) :: n
         integer, intent(in) :: nnz
-        complex(dp), dimension(nnz), intent(in) :: A(nnz)
-        integer, dimension(n), intent(in) :: ia(n+1)
-        integer, dimension(nnz), intent(in) :: ja(nnz)
+        logical, intent(in) :: use_sp
 
         integer :: i !loop index
 
@@ -66,9 +76,23 @@ contains
         this%iparm(24) = 10 !Change to 10 for two-level factorization (must disable param 11 and 13 if used)
         this%iparm(27) = 0 !Enable matrix checker, could be useful for debugging, but probably disable later
 
-        ! this%phase = 12 !Analysis + numerical factorization
-        ! call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
-            !   this%idum, this%nrhs, this%iparm, this%msglvl, this%ddum, this%ddum, this%error)
+        if (use_sp) then
+            this%iparm(28) = 1 ! Use single precision
+        end if
+
+    end subroutine PARDISO_set_params
+
+    subroutine PARDISO_setup(this,n,nnz,a,ia,ja)
+        class(PARDISO_solver), intent(inout) :: this
+        integer, intent(in) :: n
+        integer, intent(in) :: nnz
+        complex(dp), dimension(nnz), intent(in) :: a(nnz)
+        integer, dimension(n), intent(in) :: ia(n+1)
+        integer, dimension(nnz), intent(in) :: ja(nnz)
+
+        logical, parameter :: use_sp = .false.
+
+        call PARDISO_set_params(this,n,nnz,use_sp)
 
         write(6,*) ""
         write(6,*) "Performing PARDISO setup..."
@@ -81,6 +105,34 @@ contains
         end if
         write(6,*) "Done!"
     end subroutine PARDISO_setup
+
+    subroutine PARDISO_setup_sp(this,n,nnz,a,ia,ja)
+        class(PARDISO_solver_sp), intent(inout) :: this
+        integer, intent(in) :: n
+        integer, intent(in) :: nnz
+        complex(dp), dimension(nnz), intent(in) :: a(nnz)
+        integer, dimension(n), intent(in) :: ia(n+1)
+        integer, dimension(nnz), intent(in) :: ja(nnz)
+
+        logical, parameter :: use_sp = .true.
+
+        call PARDISO_set_params(this,n,nnz,use_sp)
+
+        allocate(this%a(nnz), this%x(n),this%b(n))
+
+        this%a = real(a,kind=sp)
+
+        write(6,*) ""
+        write(6,*) "Performing PARDISO setup..."
+        this%phase = 11 !Analysis
+        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%a, ia, ja, &
+              this%idum, this%nrhs, this%iparm, this%msglvl, this%sdum, this%sdum, this%error)
+
+        if (this%error.ne.0) then
+            write(6,*) 'PARDISO setup error: ', this%error
+        end if
+        write(6,*) "Done!"
+    end subroutine PARDISO_setup_sp
 
     subroutine PARDISO_factor(this,a,ia,ja)
         class(PARDISO_solver), intent(inout) :: this
@@ -95,6 +147,22 @@ contains
               this%idum, this%nrhs, this%iparm, this%msglvl, this%ddum, this%ddum, this%error)
         write(6,*) "Done!"
     end subroutine PARDISO_factor
+
+    subroutine PARDISO_factor_sp(this,a,ia,ja)
+        class(PARDISO_solver_sp), intent(inout) :: this
+        complex(dp), intent(in) :: a(this%nnz)
+        integer, intent(in) :: ia(this%n+1)
+        integer, intent(in) :: ja(this%nnz)
+
+        this%a = real(a,kind=sp)
+
+        write(6,*) ""
+        write(6,*) "Performing PARDISO factorization..."
+        this%phase = 22 !Numerical factorization
+        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%a, ia, ja, &
+              this%idum, this%nrhs, this%iparm, this%msglvl, this%sdum, this%sdum, this%error)
+        write(6,*) "Done!"
+    end subroutine PARDISO_factor_sp
 
     subroutine PARDISO_solve(this,a,ia,ja,x,b)
         class(PARDISO_solver), intent(inout) :: this
@@ -114,6 +182,30 @@ contains
 
     end subroutine PARDISO_solve
 
+    subroutine PARDISO_solve_sp(this,a,ia,ja,x,b)
+        class(PARDISO_solver_sp), intent(inout) :: this
+        complex(dp), intent(in) :: a(this%nnz)
+        integer, intent(in) :: ia (this%n+1)
+        integer, intent(in) :: ja(this%nnz)
+        complex(dp), intent(inout) :: x(this%n)
+        complex(dp), intent(inout) :: b(this%n)
+
+        this%a = real(a,kind=sp)
+        ! this%x = real(x,kind=sp)
+        this%b = real(b,kind=sp)
+
+        this%phase = 33 !Compute solution
+        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%a, ia, ja, &
+              this%idum, this%nrhs, this%iparm, this%msglvl, this%b, this%x, this%error)
+
+        if (this%error.ne.0) then
+            write(6,*) 'PARDISO solve error: ', this%error
+        end if
+
+        x = real(this%x,kind=dp)
+
+    end subroutine PARDISO_solve_sp
+
     subroutine PARDISO_cleanup(this)
         class(PARDISO_solver), intent(inout) :: this
 
@@ -124,4 +216,15 @@ contains
         deallocate(this%pt,this%iparm)
 
     end subroutine PARDISO_cleanup
+
+    subroutine PARDISO_cleanup_sp(this)
+        class(PARDISO_solver_sp), intent(inout) :: this
+
+        this%phase = -1 !Release internal memory for solver
+        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%sdum, this%idum, this%idum, &
+              this%idum, this%nrhs, this%iparm, this%msglvl, this%sdum, this%sdum, this%error)
+
+        deallocate(this%pt,this%iparm,this%a,this%x,this%b)
+
+    end subroutine PARDISO_cleanup_sp
 end module PARDISO_tools
