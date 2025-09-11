@@ -7,6 +7,7 @@ program eval_rad
     use block_tools
     use orbital_tools
     use function_eval
+    use omp_lib, only: omp_get_wtime
     implicit none
 
     character(len=:), allocatable :: input_file
@@ -14,6 +15,10 @@ program eval_rad
 
     type(basis) :: bas
     type(b_spline) :: splines
+
+    real(dp) :: t_prog_start,t_prog_end
+
+    t_prog_start = omp_get_wtime()
 
     call set_eval_defaults()
     input_file = get_input_file()
@@ -32,4 +37,8 @@ program eval_rad
         call eval_from_states_1p(eval_res_dir,eval_root_dir,bas,splines)
     end if
 
+    t_prog_end = omp_get_wtime()
+    write(6,*) "Total time for function eval (s): ", t_prog_end - t_prog_start
+    write(6,*) "Total time for function eval (min): ", (t_prog_end - t_prog_start)/60.d0
+    write(6,*) "Total time for function eval (h): ", (t_prog_end - t_prog_start)/(60.d0*60.d0)
 end program eval_rad
