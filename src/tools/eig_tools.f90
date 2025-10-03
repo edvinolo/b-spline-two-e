@@ -7,6 +7,7 @@ module eig_tools
     use iso_fortran_env, only: stdout => output_unit, stderr => error_unit
     use PARDISO_tools, only: PARDISO_solver
     use precond_tools, only: block_PC,block_PQ_PC,block_Jacobi_PC
+    use ILU0_tools, only: ILU0
     use GMRES_tools, only: zFGMRES
     use omp_lib, only: omp_get_wtime
     implicit none
@@ -517,7 +518,7 @@ contains
 
     subroutine drive_ARPACK_GMRES(GMRES,precond,B,full,shift,n_eigs,eigs,vecs,v0,max_iter,tol)
         type(zFGMRES), intent(inout) :: GMRES
-        class(block_PC), intent(inout) :: precond
+        class(*), intent(inout) :: precond
         type(CSR_matrix), intent(in) :: B
         logical, intent(in) :: full
         complex(dp), intent(in) :: shift

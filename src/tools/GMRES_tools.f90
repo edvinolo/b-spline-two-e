@@ -4,6 +4,7 @@ module GMRES_tools
     use iso_fortran_env, only: stdout => output_unit, stderr => error_unit
     use sparse_array_tools, only: CSR_matrix,CSR_dsymv
     use precond_tools, only: block_PC,block_PQ_PC,block_Jacobi_PC
+    use ILU0_tools, only: ILU0
     use omp_lib, only: omp_get_wtime
     implicit none
 
@@ -234,7 +235,7 @@ module GMRES_tools
             class(zFGMRES), intent(inout) :: this
             complex(dp), intent(out) :: x(:)
             complex(dp), intent(in) :: b(:)
-            class(block_PC), intent(inout) :: precond
+            class(*), intent(inout) :: precond
 
             integer :: ido,x_1,x_2,y_1,y_2,i,itercount
             ! real(dp) :: t_1,t_2
@@ -305,7 +306,17 @@ module GMRES_tools
                     !$omp end parallel do
 
                     ! t_1 = omp_get_wtime()
-                    call precond%solve(this%zwork(this%n+1:2*this%n),this%zwork(1:this%n))
+                    select type(precond)
+                    type is (block_Jacobi_PC)
+                        call precond%solve(this%zwork(this%n+1:2*this%n),this%zwork(1:this%n))
+                    type is (block_PQ_PC)
+                        call precond%solve(this%zwork(this%n+1:2*this%n),this%zwork(1:this%n))
+                    type is(ILU0)
+                        call precond%solve(this%zwork(this%n+1:2*this%n),this%zwork(1:this%n))
+                    class default
+                        write(stderr,*) 'Precond type not implemented'
+                        error stop
+                    end select
                     ! t_2 = omp_get_wtime()
                     ! write(stdout,*) 'precond_time: ', t_2-t_1
 

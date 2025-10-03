@@ -8,6 +8,8 @@ module ILU0_tools
         integer :: n
         integer :: nnz
         integer, allocatable :: diag_ptr(:)
+        complex(dp), allocatable :: lu_val(:)
+        complex(dp), allocatable :: temp(:)
     contains
         procedure :: setup => setup_ILU0
         procedure :: update => update_ILU0
@@ -27,7 +29,7 @@ contains
         this%n = A%shape(1)
         this%nnz = A%nnz
 
-        allocate(this%diag_ptr(this%n))
+        allocate(this%diag_ptr(this%n),this%lu_val(this%nnz),this%temp(this%n))
 
         call this%factor()
     end subroutine setup_ILU0
@@ -45,7 +47,7 @@ contains
 
         call this%A%deall()
         this%A => null()
-        deallocate(this%diag_ptr)
+        deallocate(this%diag_ptr,this%lu_val,this%temp)
     end subroutine cleanup_ILU0
 
     !Computes ILU_0 of matrix in csr format
@@ -62,6 +64,9 @@ contains
         associate(a => this%A)
         !Main loop over rows
         !Should start from 1 if setting diag to inverse, see Saad iterative linear systems book, sec 10.4
+        ! call zcopy(this%n,a%data,1,this%lu_val,1)
+        this%lu_val = a%data
+        ! this%diag_ptr(1) = 1
         do k = 1,this%n
             !pointers to first and last non-zero column of row k
             j1 = a%index_ptr(k)
@@ -152,7 +157,11 @@ contains
             !sol(i,:) = lu_values(diag_ptr(i))*sol(i,:)
             sol(i) = a%data(this%diag_ptr(i))*sol(i)
         end do
+
+        ! call mkl_zcsrtrsv('L','N','U',this%n,this%lu_val,a%index_ptr,a%indices,rhs,this%temp)
+        ! call mkl_zcsrtrsv('U','N','N',this%n,this%lu_val,a%index_ptr,a%indices,this%temp,sol)
         end associate
+
     end subroutine solve_ILU0
 
     !Subroutine to perform the triangular solves on n_RHS after ILU
@@ -164,29 +173,33 @@ contains
         complex(dp), intent(out) :: sol(this%n,nrhs)
         complex(dp), intent(in) :: rhs(this%n,nrhs)
 
-        integer i,k
+        integer i !,k
 
         associate(a => this%A)
-        !Forward solve L*sol = rhs
-        !Think if it would be faster to store rhs/sol by row? When testing it looks like it, so change how it is recieved
-        do i = 1,this%n
-            sol(i,:) = rhs(i,:)
-            do k = a%index_ptr(i), this%diag_ptr(i)-1
-                !sol(i,:) = sol(i,:)-lu_values(k)*sol(col_index(k),:)
-                sol(:,i) = sol(:,i)-a%data(k)*sol(:,a%indices(k))
-            end do
-        end do
+        ! !Forward solve L*sol = rhs
+        ! !Think if it would be faster to store rhs/sol by row? When testing it looks like it, so change how it is recieved
+        ! do i = 1,this%n
+        !     sol(i,:) = rhs(i,:)
+        !     do k = a%index_ptr(i), this%diag_ptr(i)-1
+        !         !sol(i,:) = sol(i,:)-lu_values(k)*sol(col_index(k),:)
+        !         sol(:,i) = sol(:,i)-a%data(k)*sol(:,a%indices(k))
+        !     end do
+        ! end do
 
-        !Backward solve sol = inv(U)*sol
-        do i = this%n,1,-1
-            do k = this%diag_ptr(i) + 1, a%index_ptr(i+1) - 1
-                !sol(i,:) = sol(i,:) - lu_values(k)*sol(col_index(k),:)
-                sol(:,i) = sol(:,i) - a%data(k)*sol(:,a%indices(k))
-            end do
+        ! !Backward solve sol = inv(U)*sol
+        ! do i = this%n,1,-1
+        !     do k = this%diag_ptr(i) + 1, a%index_ptr(i+1) - 1
+        !         !sol(i,:) = sol(i,:) - lu_values(k)*sol(col_index(k),:)
+        !         sol(:,i) = sol(:,i) - a%data(k)*sol(:,a%indices(k))
+        !     end do
 
-            !Here is where it is assumed that the inverse of the diagonal has been computed
-            !sol(i,:) = lu_values(diag_ptr(i))*sol(i,:)
-            sol(:,i) = a%data(this%diag_ptr(i))*sol(:,i)
+        !     !Here is where it is assumed that the inverse of the diagonal has been computed
+        !     !sol(i,:) = lu_values(diag_ptr(i))*sol(i,:)
+        !     sol(:,i) = a%data(this%diag_ptr(i))*sol(:,i)
+        ! end do
+        do i  = 1,nrhs
+            call mkl_zcsrtrsv('L','N','U',this%n,this%lu_val,a%index_ptr,a%indices,rhs(:,i),this%temp)
+            call mkl_zcsrtrsv('U','N','N',this%n,this%lu_val,a%index_ptr,a%indices,this%temp,sol(:,i))
         end do
         end associate
     end subroutine solve_ILU0_mat

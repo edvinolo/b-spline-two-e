@@ -40,8 +40,8 @@ module quasi_calcs
     ! block_PC object for preconditioning GMRES
     class(block_PC), allocatable :: precond
 
-    ! ILU0 object for test
-    ! type(ILU0) :: PC_ILU0
+    ! ILU0 object
+    type(ILU0) :: precond_ILU0
 
     ! Result variables
     complex(dp), allocatable :: eigs(:,:)
@@ -334,6 +334,23 @@ contains
             else
                 call drive_ARPACK_SI(GMRES,precond,S,full,shift_i,n_eigs_out,eigs_out(:),vecs_out(:,:))
             end if
+
+        else if (ILU_precond) then
+            if (i==1) then
+                ! call H%store('H_ilu_test.dat')
+                ! call S%store("S_ilu_test.dat")
+                call precond_ILU0%setup(H)
+                call GMRES%setup(H,full)
+            else
+                call precond_ILU0%update(H)
+                call GMRES%update(H)
+            end if
+
+            if (present(v0)) then
+                call drive_ARPACK_SI(GMRES,precond_ILU0,S,full,shift_i,n_eigs_out,eigs_out(:),vecs_out(:,:),v0=v0)
+            else
+                call drive_ARPACK_SI(GMRES,precond_ILU0,S,full,shift_i,n_eigs_out,eigs_out(:),vecs_out(:,:))
+            end if
         end if
 
     end subroutine compute_quasi
@@ -378,6 +395,11 @@ contains
         if (block_precond) then
             call GMRES%cleanup()
             call precond%cleanup()
+        end if
+
+        if (ILU_precond) then
+            call GMRES%cleanup()
+            call precond_ILU0%cleanup()
         end if
     end subroutine cleanup_solvers
 

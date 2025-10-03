@@ -72,6 +72,8 @@ module input_tools
     integer :: n_precond
     integer, allocatable :: precond_blocks(:), precond_blocks_in(:)
 
+    logical :: ILU_precond
+
     logical :: reduce_basis
     integer :: n_relevant
     integer, allocatable :: relevant_blocks(:)
@@ -102,6 +104,7 @@ module input_tools
     & couple_pq,&
     & n_precond,&
     & precond_blocks_in,&
+    & ILU_precond,&
     & reduce_basis,&
     & n_relevant,&
     & relevant_blocks,&
@@ -255,6 +258,7 @@ contains
         character(len=*), intent(in) :: input_file
 
         logical :: bad_input
+        integer :: solv_counter
 
         open(unit=1,file=input_file,action='read')
         read(1,nml=quasi_input)
@@ -296,9 +300,17 @@ contains
             bad_input = .true.
         end if
 
-        if (direct_solver.eqv.block_precond) then
+        solv_counter = 0
+        if (direct_solver) solv_counter = solv_counter + 1
+        if (block_precond) solv_counter = solv_counter + 1
+        if (ILU_precond) solv_counter = solv_counter + 1
+
+        if (solv_counter /= 1) then
             write(stderr,*)
-            write(stderr,*) "Error! The options direct_solver and block_precond must differ: ", direct_solver, block_precond
+            write(stderr,*) "Error! One, and only one of the solver options must be set."
+            write(stderr,*) "direct_solver: ", direct_solver
+            write(stderr,*) "block_precond: ", block_precond
+            write(stderr,*) "ILU_precond: ", ILU_precond
             write(stderr,*) "You need to supply correct values in the input file"
             write(stderr,*)
             bad_input = .true.
@@ -553,6 +565,7 @@ contains
         couple_pq = .false.
         n_precond = 200
         allocate(precond_blocks_in(n_precond),source = -1)
+        ILU_precond = .false.
         reduce_basis = .false.
         n_relevant = 200
         allocate(relevant_blocks(n_relevant),source = -1)
