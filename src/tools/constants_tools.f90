@@ -15,6 +15,8 @@ public
     real(dp), parameter :: pi = 4.0_dp*atan2(1.0_dp,1.0_dp)
     real(dp), parameter :: sqrt_2 = sqrt(2.0_dp)
     real(dp), parameter :: inv_sqrt_2 = 1.0_dp/sqrt_2
+    real(dp), parameter :: log_2 = log(2.0_dp)
+    real(dp), parameter :: half_log_2 = 0.5_dp*log(2.0_dp)
     complex(dp), parameter :: i_ = (0.0_dp,1.0_dp)
 
 contains
