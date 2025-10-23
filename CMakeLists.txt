@@ -35,7 +35,12 @@ add_link_options(-fopenmp)
 if (CMAKE_BUILD_TYPE STREQUAL "debug")
     add_compile_options(-O0 -fcheck=all -g -fbacktrace)
 else()
-    add_compile_options(-O3 -march=native)
+    add_compile_options(-O3 -march=native -mtune=native)
+endif()
+
+option(USE_DEBUG_PARDISO "Enable debugging mode of PARDISO" OFF)
+if (USE_DEBUG_PARDISO)
+    add_compile_definitions(DEBUG_PARDISO)
 endif()
 
 # Enable address sanitizer for gcc
@@ -87,7 +92,7 @@ target_link_libraries(basis_setup mat_els tools)
 target_link_libraries(quasi quasienergies tools)
 target_link_libraries(diag diagonalization tools)
 target_link_libraries(feval function_eval tools)
-target_link_libraries(time_prop time_dep tools)
+target_link_libraries(time_prop time_dep quasienergies tools)
 
 # Install executable in binary direcetory
 set(executables basis_setup quasi diag feval time_prop)
