@@ -33,6 +33,11 @@ Once you have cloned the repository, do the following:
   ```
   make
   ```
+- To build with Ninja use
+  ```
+  cmake .. -G Ninja
+  ninja
+  ```
 
 A shell script for building the program and its prerequisites on AWS-Linux 2023 can be found in ```utils/install_bs2e_aws_linux_2023.sh```
 
