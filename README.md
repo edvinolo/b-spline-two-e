@@ -1,5 +1,5 @@
 # b-spline-two-e
-A program that computes matrix elements for one- and two-electron atoms in the non-relativistic and dipole approximations (including the singlet approximation)
+A program that computes matrix elements for one- and two-electron atoms in the non-relativistic and dipole approximations (including the singlet approximation).
 The radial part of the wavefunctions are represented using B-splines.
 
 ## Requirements
@@ -48,12 +48,19 @@ If you additionaly want to enable the address sanitizer add
 ```
 when you run CMake.
 
+To enable more checks for PARDISO and printing of information add:
+```
+-DUSE_DEBUG_PARDISO=ON
+```
+when you run CMake.
+
 ## Currently available programs
   - ```basis_setup``` For setting up the basis and computing matrix elements.
   - ```diag``` For finding targeted eigenstates of the Hamiltonian.
   - ```quasi``` For finding complex quasienergies (Floquet, rotating-frame, or static-field).
   - ```feval``` Evaluate one-particle wavefunction or the electron density from a given state vector.
-
+  - ```time_prop``` Perform time propagation to solve the TDSE.
+  
 ### How to run 
 There are example input files located in the ```examples``` directory.
 To run e.g. ```basis_setup```, run 
