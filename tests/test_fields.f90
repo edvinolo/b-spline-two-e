@@ -3,8 +3,11 @@ program test_fields
     use stdlib_math, only: linspace
     implicit none
 
+    ! Use this to compile
+    ! gfortran-10 -I/usr/local/include/fortran_stdlib/GNU-10.5.0/ -Wall -fdefault-integer-8 -O3 -march=native -mtune=native -fopenmp -g -fcheck=all -fmax-errors=1 -cpp -o test_fields ../src/tools/kind_tools.f90 ../src/tools/constants_tools.f90 ../src/time_dep/fields.f90 test_fields.f90 /usr/local/lib/libfortran_stdlib.a
     real(dp), allocatable :: t(:)
     real(dp), allocatable :: A_t(:)
+    real(dp), allocatable :: E_t(:)
     real(dp), allocatable :: env_params(:), carrier_params(:)
     type(pulse) :: pulse_pair(2)
 
@@ -16,9 +19,9 @@ program test_fields
     real(dp), parameter :: t_0(2) = [0,1000_dp]
     real(dp), parameter :: omega(2) = [1.0_dp,0.057_dp]
     real(dp), parameter :: tau(2) = [50.0_dp,300.0_dp]
-    real(dp), parameter :: A_0(2) = [0.01_dp,0.02_dp]
+    real(dp), parameter :: intensity(2) = [1.0e13_dp,2.0e13_dp]
     real(dp), parameter :: phi(2) = [0.0_dp,0.5_dp*pi]
-    logical, parameter :: pol(3) = [.false.,.false.,.true.]
+    character(len=1), parameter :: pol(2) = ['x','y']
     real(dp), parameter :: beta = 1.0_dp
 
     integer(int32), parameter :: N_t = 10000
@@ -38,20 +41,21 @@ program test_fields
             env_params = [tau(i),beta]
         end if
         carrier_params = [omega(i),phi(i)]
-        call pulse_pair(i)%init(A_0(i),t_0(i),env_params,carrier_params,pol,env_name(i), carrier_name(i))
+        call pulse_pair(i)%init(intensity(i),t_0(i),env_params,carrier_params,pol(i),env_name(i), carrier_name(i),i)
     end do
 
     t = linspace(t_1,t_2,N_t)
-    allocate(A_t(N_t), source = 0.0_dp)
+    allocate(A_t(N_t),E_t(N_t), source = 0.0_dp)
     do i = 1,N_t
         do j = 1,2
             A_t(i) = A_t(i) + pulse_pair(j)%eval_A(t(i))
+            E_t(i) = E_t(i) + pulse_pair(j)%eval_E(t(i))
         end do
     end do
 
     open(file = 'test_fields.dat',newunit = unit, action = 'write')
     do i = 1,N_t
-        write(unit,'(es25.17e3,a,es25.17e3)') t(i),' ', A_t(i)
+        write(unit,'(es25.17e3,a,es25.17e3,a,es25.17e3)') t(i),' ', A_t(i), ' ', E_t(i)
     end do
     close(unit)
 
