@@ -699,6 +699,16 @@ contains
         close(unit)
     end subroutine write_diag_input
 
+    subroutine write_eval_input(res_dir)
+        character(len=:), allocatable, intent(in) :: res_dir
+
+        integer :: unit
+
+        open(file = res_dir // 'eval_input.dat', newunit = unit, action = 'write')
+        write(unit, nml = eval_input)
+        close(unit)
+    end subroutine write_eval_input
+
     subroutine write_time_prop_input(res_dir)
         character(len=:), allocatable, intent(in) :: res_dir
 

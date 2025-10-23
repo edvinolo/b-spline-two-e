@@ -30,6 +30,7 @@ program eval_rad
 
     eval_res_dir = eval_root_dir//'function_eval/'
     if (.not.is_dir(eval_res_dir)) call mkdir(eval_res_dir)
+    call write_eval_input(eval_res_dir)
 
     if (two_el) then
         call eval_from_states_2p(eval_res_dir,eval_root_dir,bas,splines)
