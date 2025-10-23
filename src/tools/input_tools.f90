@@ -156,6 +156,61 @@ module input_tools
     & phi_limits
 
     integer, private :: i
+
+    ! Time propagation input variables (some have same name as quasienergies, so are declared there)
+    character(len=:), allocatable :: time_prop_root_dir
+    character(len=64) :: time_prop_output_dir
+
+    real(dp) :: time_limits(2)
+    real(dp) :: dt
+
+    integer, parameter :: max_len_pulse_name = 64
+    integer, parameter :: max_n_pulses = 20
+    integer, parameter :: max_n_pulse_params = 20
+
+    integer :: n_pulses
+    character(len=max_len_pulse_name), allocatable :: env_names(:)
+    character(len=max_len_pulse_name), allocatable :: carrier_names(:)
+    real(dp), allocatable :: env_params(:,:)
+    real(dp), allocatable :: carrier_params(:,:)
+    integer, allocatable :: n_env_params(:)
+    integer, allocatable :: n_carrier_params(:)
+    real(dp), allocatable :: intensities(:)
+    real(dp), allocatable :: t_0(:)
+    character(len=1), allocatable :: pol(:)
+
+    real(dp) :: t_vecs(2)
+
+    namelist /time_prop_input/ &
+    & basis_input_dir,&
+    & time_prop_output_dir,&
+    & time_limits,&
+    & dt,&
+    & n_pulses,&
+    & env_names,&
+    & n_env_params,&
+    & env_params,&
+    & carrier_names,&
+    & n_carrier_params,&
+    & carrier_params,&
+    & intensities,&
+    & t_0,&
+    & pol,&
+    & use_essential_states,&
+    & n_ess,&
+    & target_blocks,&
+    & targets,&
+    & reduce_basis,&
+    & n_relevant,&
+    & relevant_blocks,&
+    & block_precond,&
+    & block_precond_type,&
+    & couple_pq,&
+    & n_precond,&
+    & precond_blocks_in,&
+    & store_vecs,&
+    & t_vecs
+
 contains
     function get_input_file() result(res)
         character(len=:), allocatable :: res
@@ -316,75 +371,7 @@ contains
             bad_input = .true.
         end if
 
-        if (reduce_basis.and.block_precond.and.(block_precond_type == "PQ")) then
-            if (n_precond > n_relevant) then
-                write(stderr,*)
-                write(stderr,*) "Error! n_precond is greater than n_relevant: ", n_precond, n_relevant
-                write(stderr,*) "You need to supply correct values in the input file"
-                write(stderr,*)
-                bad_input = .true.
-            end if
-
-            do i = 1,n_precond
-                if (.not.any(precond_blocks_in(i)==relevant_blocks)) then
-                    write(stderr,*)
-                    write(stderr,*) "Error! precond_blocks_in(i) not present in relevant_blocks: ",&
-                                    i, precond_blocks_in(i), relevant_blocks
-                    write(stderr,*) "You need to supply correct values in the input file"
-                    write(stderr,*)
-                    bad_input = .true.
-                end if
-            end do
-        end if
-
-        if (reduce_basis.and.use_essential_states) then
-            do i=1,n_ess
-                if (.not.any(target_blocks(i)==relevant_blocks)) then
-                    write(stderr,*)
-                    write(stderr,*) "Error! target_blocks(i) not present in relevant_blocks: ",&
-                                    i, target_blocks(i), relevant_blocks
-                    write(stderr,*) "You need to supply correct values in the input file"
-                    write(stderr,*)
-                    bad_input = .true.
-                end if
-            end do
-        end if
-
-        if (calc_H_eff.and.(.not.(use_essential_states))) then
-            write(stderr,*)
-            write(stderr,*) "Error! Must use_essential_states must be .true. if calc_H_eff is .true.: ", &
-                                use_essential_states, calc_H_eff
-            write(stderr,*) "You need to supply correct values in the input file"
-            write(stderr,*)
-            bad_input = .true.
-        end if
-
-        if (calc_H_eff.and.(n_ess /= n_quasi)) then
-            write(stderr,*)
-            write(stderr,*) "Error! n_ess and n_quasi must be equal if calc_H_eff is .true.: ", n_ess, n_quasi
-            write(stderr,*) "(H_eff must be square!)"
-            write(stderr,*) "You need to supply correct values in the input file"
-            write(stderr,*)
-            bad_input = .true.
-        end if
-
-        if (reduce_basis) then
-            relevant_blocks = relevant_blocks(1:n_relevant)
-        else
-            relevant_blocks = relevant_blocks(1:1)
-        end if
-
-        if ((block_precond).and.(block_precond_type == "PQ")) then
-            precond_blocks_in = precond_blocks_in(1:n_precond)
-        else
-            precond_blocks_in = precond_blocks_in(1:1)
-        end if
-
-        if (use_essential_states) then
-            target_blocks = target_blocks(:n_ess)
-            target_Floquet_blocks = target_Floquet_blocks(:n_ess)
-            targets = targets(:n_ess)
-        end if
+        call handle_basis_and_ess_states(bad_input)
 
         write(stdout,*)
         write(stdout,*) "Quasienergy input:"
@@ -418,14 +405,6 @@ contains
             write(stderr,*)
             write(stderr,*) "Error! The diag_output_dir you supplied: ", diag_root_dir, " does not exist."
             write(stderr,*) "You need to supply an exisiting directory to the diag_output_dir variable in the input file"
-            write(stderr,*)
-            bad_input = .true.
-        end if
-
-        if (any(calc_param<0)) then
-            write(stderr,*)
-            write(stderr,*) "Error! The calc_param not set: ", calc_param
-            write(stderr,*) "You need to supply an positive calc_param in the input file"
             write(stderr,*)
             bad_input = .true.
         end if
@@ -496,6 +475,200 @@ contains
         if (bad_input) call error_bad_input()
     end subroutine get_eval_input
 
+    subroutine get_time_prop_input(input_file)
+        character(len=*), intent(in) :: input_file
+
+        integer :: unit
+        logical :: bad_input
+
+        open(newunit=unit,file=input_file,action='read')
+        read(unit,nml=time_prop_input)
+        close(unit)
+
+        bad_input = .false.
+
+        basis_dir = trim(basis_input_dir)
+        if (.not.is_dir(basis_dir)) then
+            write(stderr,*)
+            write(stderr,*) "Error! The basis_input_dir you supplied: ", basis_dir, " does not exist."
+            write(stderr,*) "You need to supply an exisiting directory to the basis_input_dir variable in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        time_prop_root_dir = trim(time_prop_output_dir)
+        if (.not.is_dir(time_prop_root_dir)) then
+            write(stderr,*)
+            write(stderr,*) "Error! The time_prop_output_dir you supplied: ", time_prop_root_dir, " does not exist."
+            write(stderr,*) "You need to supply an exisiting directory to the time_prop_output_dir variable in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (dt <= 0) then
+            write(stderr,*)
+            write(stderr,*) "Error! dt <= 0: ", dt
+            write(stderr,*) "You need to supply dt > 0 in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (time_limits(1) >= time_limits(2)) then
+            write(stderr,*)
+            write(stderr,*) "Error! time_limits(1) >= time_limits(2): ", time_limits
+            write(stderr,*) "You need to supply time_limits(1) < time_limits(2) in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (n_pulses < 0) then
+            write(stderr,*)
+            write(stderr,*) "Error! n_pulses < 0: ", n_pulses
+            write(stderr,*) "You need to supply n_pulses >= 0 in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        env_names = env_names(1:n_pulses)
+        n_env_params = n_env_params(1:n_pulses)
+        env_params = env_params(:,1:n_pulses)
+        carrier_names = carrier_names(1:n_pulses)
+        n_carrier_params = n_carrier_params(1:n_pulses)
+        carrier_params = carrier_params(:,1:n_pulses)
+        intensities = intensities(1:n_pulses)
+        t_0 = t_0(1:n_pulses)
+        pol = pol(1:n_pulses)
+
+        if (any(n_env_params < 1)) then
+            write(stderr,*)
+            write(stderr,*) "Error! n_env_params < 1 found: ", n_env_params
+            write(stderr,*) "You need to supply n_env_params >= 1 in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (any(n_carrier_params < 1)) then
+            write(stderr,*)
+            write(stderr,*) "Error! n_carrier_params < 1 found: ", n_carrier_params
+            write(stderr,*) "You need to supply n_carrier_params >= 1 in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (any(intensities < 0)) then
+            write(stderr,*)
+            write(stderr,*) "Error! intensities < 0 found: ", intensities
+            write(stderr,*) "You need to supply intensities >= 0 in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (.not.((any(pol=='x')).or.(any(pol=='y')).or.(any(pol=='z')))) then
+            write(stderr,*)
+            write(stderr,*) "Error! pol /= x,y,z found: ", pol
+            write(stderr,*) "The polarizaiton must be one of x,y,or z in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if ((n_ess < 1) .or. (.not.(use_essential_states))) then
+            write(stderr,*)
+            write(stderr,*) "Error! n_ess < 1 or use_essential_states == .false.", n_ess, use_essential_states
+            write(stderr,*) "Must use one essential state as inital state"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+        call handle_basis_and_ess_states(bad_input)
+
+        if (store_vecs.and.(t_vecs(1) >= t_vecs(2))) then
+            write(stderr,*)
+            write(stderr,*) "Error! t_vecs(1) >= t_vecs(2)", t_vecs(1), t_vecs(2)
+            write(stderr,*) "Must set t_vecs(1) < t_vecs(2) in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        write(stdout,*)
+        write(stdout,*) "Time propagation input:"
+        write(stdout,nml=time_prop_input)
+
+        if (bad_input) call error_bad_input()
+    end subroutine get_time_prop_input
+
+    subroutine handle_basis_and_ess_states(bad_input)
+        logical, intent(inout) :: bad_input
+
+        if (reduce_basis.and.block_precond.and.(block_precond_type == "PQ")) then
+            if (n_precond > n_relevant) then
+                write(stderr,*)
+                write(stderr,*) "Error! n_precond is greater than n_relevant: ", n_precond, n_relevant
+                write(stderr,*) "You need to supply correct values in the input file"
+                write(stderr,*)
+                bad_input = .true.
+            end if
+
+            do i = 1,n_precond
+                if (.not.any(precond_blocks_in(i)==relevant_blocks)) then
+                    write(stderr,*)
+                    write(stderr,*) "Error! precond_blocks_in(i) not present in relevant_blocks: ",&
+                                    i, precond_blocks_in(i), relevant_blocks
+                    write(stderr,*) "You need to supply correct values in the input file"
+                    write(stderr,*)
+                    bad_input = .true.
+                end if
+            end do
+        end if
+
+        if (reduce_basis.and.use_essential_states) then
+            do i=1,n_ess
+                if (.not.any(target_blocks(i)==relevant_blocks)) then
+                    write(stderr,*)
+                    write(stderr,*) "Error! target_blocks(i) not present in relevant_blocks: ",&
+                                    i, target_blocks(i), relevant_blocks
+                    write(stderr,*) "You need to supply correct values in the input file"
+                    write(stderr,*)
+                    bad_input = .true.
+                end if
+            end do
+        end if
+
+        if (calc_H_eff.and.(.not.(use_essential_states))) then
+            write(stderr,*)
+            write(stderr,*) "Error! Must use_essential_states must be .true. if calc_H_eff is .true.: ", &
+                                use_essential_states, calc_H_eff
+            write(stderr,*) "You need to supply correct values in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (calc_H_eff.and.(n_ess /= n_quasi)) then
+            write(stderr,*)
+            write(stderr,*) "Error! n_ess and n_quasi must be equal if calc_H_eff is .true.: ", n_ess, n_quasi
+            write(stderr,*) "(H_eff must be square!)"
+            write(stderr,*) "You need to supply correct values in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (reduce_basis) then
+            relevant_blocks = relevant_blocks(1:n_relevant)
+        else
+            relevant_blocks = relevant_blocks(1:1)
+        end if
+
+        if ((block_precond).and.(block_precond_type == "PQ")) then
+            precond_blocks_in = precond_blocks_in(1:n_precond)
+        else
+            precond_blocks_in = precond_blocks_in(1:1)
+        end if
+
+        if (use_essential_states) then
+            target_blocks = target_blocks(:n_ess)
+            target_Floquet_blocks = target_Floquet_blocks(:n_ess)
+            targets = targets(:n_ess)
+        end if
+    end subroutine handle_basis_and_ess_states
+
     subroutine write_basis_input(res_dir)
         character(len=:), allocatable, intent(in) :: res_dir
 
@@ -525,6 +698,16 @@ contains
         write(unit, nml = diag_input)
         close(unit)
     end subroutine write_diag_input
+
+    subroutine write_time_prop_input(res_dir)
+        character(len=:), allocatable, intent(in) :: res_dir
+
+        integer :: unit
+
+        open(file = res_dir // 'time_prop_input.dat', newunit = unit, action = 'write')
+        write(unit, nml = time_prop_input)
+        close(unit)
+    end subroutine write_time_prop_input
 
     subroutine set_basis_defaults()
         k = 6
@@ -593,9 +776,44 @@ contains
         r_limits = [0.01_dp,10.0_dp]
     end subroutine set_eval_defaults
 
+    subroutine set_time_prop_defaults()
+        basis_input_dir = "-"
+        time_prop_output_dir = "-"
+        time_limits = [0,100]
+        dt = 0.05_dp
+        n_pulses = -1
+        allocate(env_names(max_n_pulses))
+        allocate(n_env_params(max_n_pulses),source=-1)
+        allocate(env_params(max_n_pulse_params,max_n_pulses))
+        allocate(carrier_names(max_n_pulses))
+        allocate(n_carrier_params(max_n_pulses),source=-1)
+        allocate(carrier_params(max_n_pulse_params,max_n_pulses))
+        allocate(intensities(max_n_pulses),source=-1.0_dp)
+        allocate(t_0(max_n_pulses),source=0.0_dp)
+        allocate(pol(max_n_pulses),source='-')
+        use_essential_states = .true.
+        n_ess = 1
+        allocate(target_blocks(100),source=-1)
+        target_blocks(1) = 1
+        allocate(targets(100),source = (0.0_dp,0.0_dp))
+        reduce_basis = .false.
+        n_relevant = 200
+        allocate(relevant_blocks(n_relevant), source = -1)
+        block_precond = .true.
+        block_precond_type = "Jacobi"
+        couple_pq = .false.
+        n_precond = 200
+        allocate(precond_blocks_in(n_precond),source = -1)
+        store_vecs = .false.
+        t_vecs = [0.0d0,0.5d0]
+
+        ! Just set this so that check passes
+        allocate(target_Floquet_blocks(n_relevant),source = 0)
+    end subroutine set_time_prop_defaults
+
     subroutine error_bad_input()
         write(stderr,*)
-        write(stderr,*) "Some of the input parameters were bad, see warnings above"
+        write(stderr,*) "Some of the input parameters were bad, see errors above"
         stop
     end subroutine error_bad_input
 end module input_tools
