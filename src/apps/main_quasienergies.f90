@@ -42,13 +42,6 @@ program main_quasienergies
     call write_basis_input(quasi_res_dir)
     call write_quasi_input(quasi_res_dir)
 
-    ! Setup the structure of the interaction matrix D (to be multiplied by field strength to get true interaction V)
-    if (z_pol.and.(calc_type/='static')) then
-        call setup_dip_floquet(dip(0),D)
-    else if (.not.z_pol) then
-        call setup_dip_circ(dip,D,gauge)
-    end if
-
     if (use_essential_states) then
         if (z_pol.and.(calc_type/='static')) then
             call setup_Floquet_essential_states(ess_states,n_ess,target_blocks,n_blocks,target_Floquet_blocks,bas)
@@ -60,9 +53,9 @@ program main_quasienergies
 
     if (reduce_basis) then
         if (use_essential_states) then
-            call red_basis(bas,H_0_block,S_block,D,ess_states)
+            call red_basis(bas,H_0_block,S_block,dip,ess_states)
         else
-            call red_basis(bas,H_0_block,S_block,D)
+            call red_basis(bas,H_0_block,S_block,dip)
         end if
     else
         precond_blocks = precond_blocks_in
@@ -70,15 +63,22 @@ program main_quasienergies
 
     if ((block_precond).and.(block_precond_type=='PQ')) then
         if (use_essential_states) then
-            call reorder_blocks(bas,H_0_block,S_block,D,ess_states)
+            call reorder_blocks(bas,H_0_block,S_block,dip,ess_states)
         else
-            call reorder_blocks(bas,H_0_block,S_block,D)
+            call reorder_blocks(bas,H_0_block,S_block,dip)
         end if
     end if
 
     ! Store information about the actual basis that was used
     call bas%store(quasi_res_dir)
     call splines%store(quasi_res_dir)
+
+    ! Setup the structure of the interaction matrix D (to be multiplied by field strength to get true interaction V)
+    if (z_pol.and.(calc_type/='static')) then
+        call setup_dip_floquet(dip(0),D)
+    else if (.not.z_pol) then
+        call setup_dip_circ(dip,D,gauge)
+    end if
 
     if (calc_type == 'omega') then
         call omega_scan(H_0_block,S_block,D,bas,gs_energy,quasi_res_dir)

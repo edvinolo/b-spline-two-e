@@ -21,6 +21,10 @@ include_directories("${CMAKE_BINARY_DIR}/src/mat_els")
 include_directories("${CMAKE_BINARY_DIR}/src/quasienergies")
 include_directories("${CMAKE_BINARY_DIR}/src/diagonalization")
 include_directories("${CMAKE_BINARY_DIR}/src/function_eval")
+include_directories("${CMAKE_BINARY_DIR}/src/time_dep")
+
+# Make sure color ouput is used by the build system for more readable error messages and warnings
+set(CMAKE_COLOR_DIAGNOSTICS ON)
 
 # Set compiler flags that should always be on
 add_compile_options(-Wall -fopenmp -cpp)
@@ -31,7 +35,12 @@ add_link_options(-fopenmp)
 if (CMAKE_BUILD_TYPE STREQUAL "debug")
     add_compile_options(-O0 -fcheck=all -g -fbacktrace)
 else()
-    add_compile_options(-O3 -march=native)
+    add_compile_options(-O3 -march=native -mtune=native)
+endif()
+
+option(USE_DEBUG_PARDISO "Enable debugging mode of PARDISO" OFF)
+if (USE_DEBUG_PARDISO)
+    add_compile_definitions(DEBUG_PARDISO)
 endif()
 
 # Enable address sanitizer for gcc
@@ -69,19 +78,22 @@ add_subdirectory(src/mat_els)
 add_subdirectory(src/quasienergies)
 add_subdirectory(src/diagonalization)
 add_subdirectory(src/function_eval)
+add_subdirectory(src/time_dep)
 
 # Add executables
 add_executable(basis_setup src/apps/main_basis_setup.f90)
 add_executable(quasi src/apps/main_quasienergies.f90)
 add_executable(diag src/apps/main_diagonalization.f90)
 add_executable(feval src/apps/main_eval_rad.f90)
+add_executable(time_prop src/apps/main_time_prop.f90)
 
 # Link libraries to executable
 target_link_libraries(basis_setup mat_els tools)
 target_link_libraries(quasi quasienergies tools)
 target_link_libraries(diag diagonalization tools)
 target_link_libraries(feval function_eval tools)
+target_link_libraries(time_prop time_dep quasienergies tools)
 
 # Install executable in binary direcetory
-set(executables basis_setup quasi diag feval)
+set(executables basis_setup quasi diag feval time_prop)
 install(TARGETS ${executables} DESTINATION bin)

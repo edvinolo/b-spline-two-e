@@ -314,7 +314,7 @@ contains
         call H_block%to_CS(H,.true.)
 
         if (direct_solver) then
-            if (i == 1) call solver%setup(H%shape(1),H%nnz,H%data,H%index_ptr,H%indices)
+            if (i == 1) call solver%setup(H%shape(1),H%nnz,H%data,H%index_ptr,H%indices,full)
             call solver%factor(H%data,H%index_ptr,H%indices)
             if (present(v0)) then
                 call drive_ARPACK_SI(H,solver,S,full,shift_i,n_eigs_out,eigs_out(:),vecs_out(:,:),v0=v0)
@@ -688,10 +688,10 @@ contains
         type(basis), intent(inout) :: bas
         type(block_diag_CS), intent(inout) :: H_0_block
         type(block_diag_CS), intent(inout) :: S_block
-        type(block_CS), intent(inout) :: D
+        type(block_CS), intent(inout) :: D(3)
         type(essential_state), intent(inout), optional :: states(:)
 
-        integer :: j,i,kk
+        integer :: j,i,kk,id
 
         ! write(6,*) bas%syms%m
         ! do i = 1,bas%n_sym
@@ -710,8 +710,10 @@ contains
             S_block%blocks([i,j]) = S_block%blocks([j,i])
 
             ! Transform off-diagonal blocks
-            D%blocks([i,j],:) = D%blocks([j,i],:)
-            D%blocks(:,[i,j]) = D%blocks(:,[j,i])
+            do id = 1,3
+                D(id)%blocks([i,j],:) = D(id)%blocks([j,i],:)
+                D(id)%blocks(:,[i,j]) = D(id)%blocks(:,[j,i])
+            end do
 
             if (present(states)) then
                 do kk = 1,n_ess
@@ -729,12 +731,14 @@ contains
         ! If using upper storage, make sure that only blocks in the upper triangular part are present
         ! Transpose those blocks that are below diagonal
         if (.not.full) then
-            do j = 1,bas%n_sym
-                do i = j+1,bas%n_sym
-                    if (D%blocks(i,j)%nnz /= 0) then
-                        call D%blocks(i,j)%transp(D%blocks(j,i))
-                        call D%blocks(i,j)%deall()
-                    end if
+            do id = 1,3
+                do j = 1,bas%n_sym
+                    do i = j+1,bas%n_sym
+                        if (D(id)%blocks(i,j)%nnz /= 0) then
+                            call D(id)%blocks(i,j)%transp(D(id)%blocks(j,i))
+                            call D(id)%blocks(i,j)%deall()
+                        end if
+                    end do
                 end do
             end do
         end if
@@ -752,10 +756,10 @@ contains
         type(basis), intent(inout) :: bas
         type(block_diag_CS), intent(inout) :: H_0_block
         type(block_diag_CS), intent(inout) :: S_block
-        type(block_CS), intent(inout) :: D
+        type(block_CS), intent(inout) :: D(3)
         type(essential_state), intent(inout), optional :: states(:)
 
-        integer :: j,i,ptr
+        integer :: j,i,ptr,id
 
         type(CSR_matrix), allocatable :: H_temp(:),S_temp(:)
         type(CSR_matrix), allocatable :: D_temp(:,:)
@@ -791,14 +795,16 @@ contains
         call move_alloc(S_temp,S_block%blocks)
         call S_block%compute_shape()
 
-        D%block_shape = [n_relevant,n_relevant]
-        do j = 1,n_relevant
-            do i = 1,n_relevant
-                D_temp(i,j) = D%blocks(relevant_blocks(i),relevant_blocks(j))
+        do id = 1,3
+            D(id)%block_shape = [n_relevant,n_relevant]
+            do j = 1,n_relevant
+                do i = 1,n_relevant
+                    D_temp(i,j) = D(id)%blocks(relevant_blocks(i),relevant_blocks(j))
+                end do
             end do
+            call move_alloc(D_temp,D(id)%blocks)
+            call D(id)%compute_shape()
         end do
-        call move_alloc(D_temp,D%blocks)
-        call D%compute_shape()
 
         if (present(states)) then
             do i = 1,n_relevant

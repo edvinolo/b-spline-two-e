@@ -28,6 +28,7 @@ module essential_states
     contains
         procedure :: set_pointers => set_regular_pointers
         procedure :: projection
+        procedure :: projection_full
     end type essential_state
 
     type, extends(essential_state), public :: Floquet_essential_state
@@ -93,6 +94,28 @@ contains
 
         res = zdotu(N,vec(this%ptr(1):this%ptr(2)),1,temp,1)
     end function projection
+
+    function projection_full(this,vec,S,full) result(res)
+        class(essential_state), intent(in) :: this
+        complex(dp), intent(in) :: vec(:)
+        type(CSR_matrix), intent(in) :: S
+        logical, intent(in) :: full
+        complex(dp) :: res
+
+        integer :: N
+        complex(dp), allocatable :: temp(:)
+
+        N = size(this%vector)
+        allocate(temp(size(vec)))
+
+        if (full) then
+            call CSR_mv(S,vec,temp)
+        else
+            call CSR_mv_sym(S,vec,temp)
+        end if
+
+        res = zdotu(N,temp(this%ptr(1):this%ptr(2)),1,this%vector,1)
+    end function projection_full
 
     subroutine setup_essential_states(states,n_ess,target_blocks,bas)
         class(essential_state), allocatable, intent(inout) :: states(:)

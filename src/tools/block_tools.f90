@@ -1,4 +1,5 @@
 module block_tools
+    use kind_tools
     use sparse_array_tools, only: CSR_matrix
     use iso_fortran_env, only: stdout => output_unit, stderr => error_unit
     implicit none
@@ -32,6 +33,9 @@ module block_tools
         procedure :: store => CS_block_store
         procedure :: load => CS_block_load
         procedure :: scale => CS_block_scale
+        procedure :: shift_B => CS_block_shift_B
+        generic :: operator(*) => scalar_mult
+        procedure, pass(X) :: scalar_mult => CS_block_scalar_mult
     end type block_CS
 
     type, public :: block_diag_CS
@@ -46,6 +50,9 @@ module block_tools
         procedure :: store => CS_block_diag_store
         procedure :: load => CS_block_diag_load
         procedure :: scale => CS_block_diag_scale
+        procedure :: shift_B => CS_block_diag_shift_B
+        generic :: operator(*) => scalar_mult
+        procedure, pass(X) :: scalar_mult => CS_block_diag_scalar_mult
     end type  block_diag_CS
 
     interface XPAY
@@ -539,6 +546,52 @@ contains
             call this%blocks(i)%scale(alpha)
         end do
     end subroutine CS_block_diag_scale
+
+    function CS_block_scalar_mult(alpha,X) result(res)
+        complex(dp), intent(in) :: alpha
+        class(block_CS), intent(in) :: X
+        class(block_CS), allocatable :: res
+
+        allocate(block_CS :: res)
+        res = X
+        call res%scale(alpha)
+    end function CS_block_scalar_mult
+
+    function CS_block_diag_scalar_mult(alpha,X) result(res)
+        complex(dp), intent(in) :: alpha
+        class(block_diag_CS), intent(in) :: X
+        class(block_diag_CS), allocatable :: res
+
+        allocate(block_diag_CS :: res)
+        res = X
+        call res%scale(alpha)
+    end function CS_block_diag_scalar_mult
+
+    subroutine CS_block_shift_B(this,shift,B)
+        class(block_CS), intent(inout) :: this
+        complex(dp), intent(in) :: shift
+        class(block_CS), intent(in) :: B
+
+        integer i,j
+
+        do i = 1,this%block_shape(2)
+            do j = 1,this%block_shape(1)
+                call this%blocks(j,i)%shift_B(shift,B%blocks(j,i))
+            end do
+        end do
+    end subroutine CS_block_shift_B
+
+    subroutine CS_block_diag_shift_B(this,shift,B)
+        class(block_diag_CS), intent(inout) :: this
+        complex(dp), intent(in) :: shift
+        class(block_diag_CS), intent(in) :: B
+
+        integer i
+
+        do i = 1,this%block_shape(1)
+            call this%blocks(i)%shift_B(shift,B%blocks(i))
+        end do
+    end subroutine CS_block_diag_shift_B
 
     ! Function that returns the result of adding a block diagonal sparse matrix X to a block sparse matrix Y.
     ! The second block matrix is assumed to have empty blocks on the diagonal.

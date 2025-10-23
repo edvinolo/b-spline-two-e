@@ -14,6 +14,7 @@ module GMRES_tools
         integer :: n
         procedure(mv_GMRES), pointer :: mv
         logical :: full
+        logical :: store
         real(dp), allocatable :: a(:) ! real part of matrix
         integer, allocatable :: ia(:), ja(:)
         real(dp), allocatable :: b(:) ! imaginary part of matrix. Could be chosen to be smaller than a, since only a small subset of matrix elements have imaginary part (from CAP, if I am clever)
@@ -44,12 +45,14 @@ module GMRES_tools
 
     contains
 
-        subroutine setup_zFGMRES(this,C,full,tol,max_iter)
+        subroutine setup_zFGMRES(this,C,full,tol,max_iter,store_matrix)
             class(zFGMRES), intent(inout) :: this
             type(CSR_matrix), intent(in) :: C
             logical, intent(in) :: full
             real(dp), optional, intent(in) :: tol
             integer, optional, intent(in) :: max_iter
+            logical, optional, intent(in) :: store_matrix
+
 
             if (present(tol)) then
                 this%tol = tol
@@ -63,6 +66,12 @@ module GMRES_tools
                 this%max_iter = 150
             end if
 
+            if (present(store_matrix)) then
+                this%store = store_matrix
+            else
+                this%store = .true.
+            end if
+
             this%full = full
             if (full) then
                 this%mv => gemv_zFGMRES
@@ -70,14 +79,16 @@ module GMRES_tools
                 this%mv => symv_zFGMRES
             end if
 
-            this%a = real(C%data,kind=dp)
-            this%b = aimag(C%data)
+            if (this%store) then
+                this%a = real(C%data,kind=dp)
+                this%b = aimag(C%data)
 
-            this%ia = C%index_ptr
-            ! this%ib = C%index_ptr
+                this%ia = C%index_ptr
+                ! this%ib = C%index_ptr
 
-            this%ja = C%indices
-            ! this%jb = C%indices
+                this%ja = C%indices
+                ! this%jb = C%indices
+            end if
 
             this%n = C%shape(1)
 
@@ -333,7 +344,7 @@ module GMRES_tools
                 else if (ido == 4) then
                     ! Check norm of new vector
                     if (this%dpar(7) <= this%dpar(8)) then
-                        write(stdout,*) this%dpar(7), this%dpar(8)
+                        ! write(stdout,*) this%dpar(7), this%dpar(8)
                         ! ido = 0
                         exit
                     end if
@@ -367,7 +378,7 @@ module GMRES_tools
         subroutine cleanup_zFGMRES(this)
             class(zFGMRES), intent(inout) :: this
 
-            deallocate(this%a,this%ia,this%ja,this%b)!,this%ib,this%jb)
+            if (this%store) deallocate(this%a,this%ia,this%ja,this%b)!,this%ib,this%jb)
             deallocate(this%b_work,this%x_work,this%dwork,this%zwork,this%tmp)
         end subroutine cleanup_zFGMRES
 

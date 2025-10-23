@@ -103,7 +103,7 @@ contains
         H_i = H
         call H_i%shift_B(-target,S)
 
-        call solver%setup(H_i%shape(1),H_i%nnz,H_i%data,H_i%index_ptr,H_i%indices)
+        call solver%setup(H_i%shape(1),H_i%nnz,H_i%data,H_i%index_ptr,H_i%indices,full)
         call solver%factor(H_i%data,H_i%index_ptr,H_i%indices)
 
         call drive_ARPACK_SI(H_i, solver, S, full, target, n_energies, energies, vectors)

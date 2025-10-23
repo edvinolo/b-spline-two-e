@@ -5,7 +5,7 @@ module precond_tools
     use PARDISO_tools, only: PARDISO_solver, PARDISO_solver_sp
     use ILU0_tools, only: ILU0
     use Jacobi_tools, only: Jacobi
-    use input_tools, only: n_precond,n_relevant,couple_pq
+    use input_tools, only: n_precond,n_relevant,couple_pq,full
     implicit none
 
     type, abstract, public :: block_PC
@@ -79,6 +79,8 @@ module precond_tools
         procedure :: update => update_block_Jacobi_PC
         procedure :: solve => solve_block_Jacobi_PC
         procedure :: cleanup => cleanup_block_Jacobi_PC
+        procedure :: setup_diag => setup_diag_block_Jacobi_PC
+        procedure :: update_diag => update_diag_block_Jacobi_PC
     end type block_Jacobi_PC
 
     type, extends(block_Jacobi_PC), public :: block_Jacobi_sp_PC
@@ -161,7 +163,7 @@ contains
         ! Factorize H_pp
         if (first) then
             call this%solv_pp%setup(this%H_pp%shape(1),this%H_pp%nnz,this%H_pp%data,&
-                                    this%H_pp%index_ptr,this%H_pp%indices)
+                                    this%H_pp%index_ptr,this%H_pp%indices,full)
             ! call this%solv_pp%setup(this%H_pp)
         else
             ! call this%solv_pp%update(this%H_pp)
@@ -171,7 +173,7 @@ contains
         ! Factorize H_qq_0
         if (first) then
             call this%solv_qq%setup(this%H_qq%shape(1),this%H_qq%nnz,this%H_qq%data,&
-                                    this%H_qq%index_ptr,this%H_qq%indices)
+                                    this%H_qq%index_ptr,this%H_qq%indices,full)
             ! call this%solv_qq%setup(this%H_qq)
         else
             ! call this%solv_qq%update(this%H_qq)
@@ -294,6 +296,19 @@ contains
         call this%update(H,first_in=.true.)
     end subroutine setup_block_Jacobi_PC
 
+    subroutine setup_diag_block_Jacobi_PC(this,H)
+        class(block_Jacobi_PC), intent(inout) :: this
+        type(block_diag_CS), intent(in) :: H
+
+        ! Set scalar components
+        this%n = H%block_shape(1)
+
+        allocate(PARDISO_solver :: this%solv)
+
+        ! Do first factorization
+        call this%update_diag(H,first_in=.true.)
+    end subroutine setup_diag_block_Jacobi_PC
+
     subroutine setup_block_Jacobi_sp_PC(this,H)
         class(block_Jacobi_sp_PC), intent(inout) :: this
         type(block_CS), intent(in) :: H
@@ -331,10 +346,39 @@ contains
         ! Factorize H_0
         if (first) then
             call this%solv%setup(this%H_0%shape(1),this%H_0%nnz,this%H_0%data,&
-                                    this%H_0%index_ptr,this%H_0%indices)
+                                    this%H_0%index_ptr,this%H_0%indices,full)
         end if
         call this%solv%factor(this%H_0%data,this%H_0%index_ptr,this%H_0%indices)
     end subroutine update_block_Jacobi_PC
+
+    subroutine update_diag_block_Jacobi_PC(this,H,first_in)
+        class(block_Jacobi_PC), intent(inout) :: this
+        type(block_diag_CS), intent(in) :: H
+        logical, optional, intent(in) :: first_in
+
+        logical :: first
+        integer :: i
+
+        if (present(first_in)) then
+            first = first_in
+        else
+            first = .false.
+        end if
+
+        ! Assemble the 0:th order Hamiltonian
+        if (first) call this%H_0_block%init(this%n)
+        do i = 1,this%n
+            this%H_0_block%blocks(i) = H%blocks(i)
+        end do
+        call this%H_0_block%to_CS(this%H_0,.true.)
+
+        ! Factorize H_0
+        if (first) then
+            call this%solv%setup(this%H_0%shape(1),this%H_0%nnz,this%H_0%data,&
+                                    this%H_0%index_ptr,this%H_0%indices,full)
+        end if
+        call this%solv%factor(this%H_0%data,this%H_0%index_ptr,this%H_0%indices)
+    end subroutine update_diag_block_Jacobi_PC
 
     subroutine solve_block_Jacobi_PC(this,x,b)
         class(block_Jacobi_PC), intent(inout) :: this
