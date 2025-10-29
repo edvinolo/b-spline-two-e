@@ -65,6 +65,7 @@ when you run CMake.
   - ```quasi``` For finding complex quasienergies (Floquet, rotating-frame, or static-field).
   - ```feval``` Evaluate one-particle wavefunction or the electron density from a given state vector.
   - ```time_prop``` Perform time propagation to solve the TDSE.
+  - ```RKH``` Find rotating frame Siegert states and adiabatic potentials
   
 ### How to run 
 There are example input files located in the ```examples``` directory.
