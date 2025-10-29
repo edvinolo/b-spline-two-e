@@ -1,0 +1,10 @@
+&RKH_input
+basis_input_dir = 'basis_output/0001/'
+RKH_output_dir = 'RKH_output'
+N_r = 601
+r_limits = 1.0d-5,2.5d1
+RKH_intensity = 3.0d14
+RKH_omega = 0.375d0
+gs_energy = (-0.5d0,1.0d-5)
+n_quasi = 11
+/ 

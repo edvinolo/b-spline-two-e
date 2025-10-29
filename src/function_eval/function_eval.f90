@@ -152,6 +152,96 @@ contains
         close(unit)
     end subroutine write_func_1p
 
+    subroutine write_func_1p_from_vals(vals,bas,res_file,lm_basis)
+        complex(dp), intent(in) :: vals(:,:)
+        type(basis), intent(in) :: bas
+        character(len=*), intent(in) :: res_file
+        logical, intent(in) :: lm_basis
+
+        integer :: i,i_r,unit
+        complex(dp) :: val
+
+        open(file = res_file, newunit = unit, action = 'write')
+        write(unit,'(a)') "# First row gives number of radial points (N_r) and number of channels (n_sym)."
+        write(unit,'(a)') "# The next N_r rows gives the radial points. Then follows a blank row."
+        write(unit,'(a)') "# Then comes the radial function of each channel. First row is the channel labels"
+        write(unit,'(a)') "# and the next N_r rows are the values. The channels are separated by blank rows."
+
+        write(unit,'(I4,I4)') N_r,bas%n_sym
+        do i_r = 1,N_r
+            write(unit,'(es24.17e3)') r_vec(i_r)
+        end do
+
+        do i = 1,bas%n_sym
+            write(unit,*)''
+            if (lm_basis) then
+                write(unit,'(I4,I4)') bas%syms(i)%l,bas%syms(i)%m
+            else
+                write(unit,'(I4,I4)') i,i
+            end if
+
+            do i_r = 1,N_r
+                val = vals(i_r,i)
+                if (isnan(real(val,kind=dp)).or.isnan(aimag(val))) then
+                    write(stdout,*) val,r_vec(i_r),i
+                end if
+                write(unit,'(a)', advance='no') '('
+
+                if (real(val,kind = dp)<0) then
+                    write(unit,'(es25.17e3)', advance='no') real(val,kind = dp)
+                else
+                    write(unit,'(es24.17e3)', advance='no') real(val,kind = dp)
+                end if
+
+                if (aimag(val)<0) then
+                    write(unit,'(es25.17e3)', advance='no') aimag(val)
+                else
+                    write(unit,'(a)', advance='no') '+'
+                    write(unit,'(es24.17e3)', advance='no') aimag(val)
+                end if
+
+                write(unit,'(a)', advance='no') 'j) '
+                write(unit,*)''
+            end do
+
+        end do
+
+        close(unit)
+    end subroutine write_func_1p_from_vals
+
+    subroutine array_func_1p(state,bas,splines,arr_out)
+        complex(dp), intent(in) :: state(:)
+        type(basis), intent(in) :: bas
+        type(b_spline), intent(in) :: splines
+        complex(dp), intent(out) :: arr_out(:,:)
+
+        complex(dp), allocatable :: coeffs(:)
+        complex(dp) :: val
+
+        integer :: i,j,ptr,i_r,index
+
+        if (.not.allocated(r_vec)) allocate(r_vec(N_r))
+        r_vec = linspace(r_limits(1),r_limits(2),N_r)
+        allocate(coeffs(splines%n))
+
+        ptr = 1
+        do i = 1,bas%n_sym
+
+            coeffs = (0.0_dp,0.0_dp)
+            do j = 1,bas%syms(i)%n_config
+                index = bas%syms(i)%configs(j)%n(1) + 1
+                coeffs(index) = state(ptr)
+                ptr = ptr + 1
+            end do
+
+            do i_r = 1,N_r
+                val = eval_rad_1p(coeffs,splines,r_vec(i_r))
+                arr_out(i_r,i) = val
+            end do
+
+        end do
+    end subroutine array_func_1p
+
     subroutine write_density_2p(state,bas,splines,res_file)
         complex(dp), intent(in) :: state(:)
         type(basis), intent(in) :: bas

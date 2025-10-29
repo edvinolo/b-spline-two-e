@@ -71,7 +71,7 @@ contains
         call zggev3(jobvl,jobvr,N,A,N,B_copy,N,alpha,beta,vl,N,vecs,N,work,lwork,rwork,info)
 
         if (info /= 0) then
-            write(stderr,*) "zggev exited with info: ", info
+            write(stderr,*) "zggev3 exited with info: ", info
             write(stderr,*) "Please consult lapack documentation for explanation."
             stop
         end if
@@ -86,6 +86,67 @@ contains
         end do
 
     end subroutine eig_general
+
+    subroutine eig_real_sym(A,eigs,vecs,uplo)
+        real(dp), intent(inout) :: A(:,:)
+        real(dp), intent(out) :: eigs(:)
+        real(dp), intent(out) :: vecs(:,:)
+        character(len=1), intent(in) :: uplo
+
+        ! dsyevr Input parameters
+        character(len=1), parameter :: jobz = 'V' ! Compute eigs and vecs
+        character(len=1), parameter :: range = 'A' ! Compute all eigenvectors
+        integer :: n
+        integer :: lda
+        real(dp), parameter :: vl = 0 ! Not referenced when range = 'A'
+        real(dp), parameter :: vu = 0 ! Not referenced when range = 'A'
+        integer, parameter :: il = 0 ! Not referenced when range = 'A'
+        integer, parameter :: iu = 0 ! Not referenced when range = 'A'
+        real(dp), parameter :: abstol = -1.0_dp ! Use n*eps*||T|| for abstol (computed by LAPACK)
+        integer :: ldz
+        real(dp), allocatable :: work(:)
+        integer :: lwork
+        integer, allocatable :: iwork(:)
+        integer :: liwork
+
+        ! dsyevr Output parameters
+        integer :: m
+        integer, allocatable :: isuppz(:)
+        integer :: info
+
+        ! Workspace query
+        n = size(A,dim=1)
+        lda = n
+        ldz = n
+        allocate(isuppz(2*n),work(1),iwork(1))
+        lwork = -1
+        liwork = -1
+        call dsyevr(jobz,range,uplo,n,A,lda,vl,vu,il,iu,abstol,m,eigs,vecs,ldz,isuppz,work,lwork,iwork,liwork,info)
+
+        if (info /= 0) then
+            write(stderr,*) "dsyevr exited with info: ", info
+            write(stderr,*) "Please consult lapack documentation for explanation."
+            stop
+        end if
+
+        lwork = int(work(1))
+        deallocate(work)
+        allocate(work(lwork))
+
+        liwork = iwork(1)
+        deallocate(iwork)
+        allocate(iwork(liwork))
+
+        ! Actual call to dysevr
+        call dsyevr(jobz,range,uplo,n,A,lda,vl,vu,il,iu,abstol,m,eigs,vecs,ldz,isuppz,work,lwork,iwork,liwork,info)
+
+        if (info /= 0) then
+            write(stderr,*) "dsyevr exited with info: ", info
+            write(stderr,*) "Please consult lapack documentation for explanation."
+            stop
+        end if
+
+    end subroutine eig_real_sym
 
     subroutine B_normalize(B,vecs)
         double complex, dimension(:,:), intent(in) :: B

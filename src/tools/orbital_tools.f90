@@ -32,6 +32,8 @@ module orbital_tools
         procedure :: store => store_basis
         procedure :: load => load_basis
     end type basis
+
+    private :: pi
 contains
 
     pure function pi(orbs) result(res)

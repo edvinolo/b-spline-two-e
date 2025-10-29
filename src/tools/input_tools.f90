@@ -211,6 +211,23 @@ module input_tools
     & store_vecs,&
     & t_vecs
 
+    ! RKH input variables
+    character(len=:), allocatable :: RKH_root_dir
+    character(len=64) :: RKH_output_dir
+
+    real(dp) :: RKH_intensity
+    real(dp) :: RKH_omega
+
+    namelist /RKH_input/ &
+    & basis_input_dir,&
+    & RKH_output_dir,&
+    & N_r,&
+    & r_limits,&
+    & RKH_intensity,&
+    & RKH_omega,&
+    & n_quasi,&
+    & gs_energy
+
 contains
     function get_input_file() result(res)
         character(len=:), allocatable :: res
@@ -595,6 +612,82 @@ contains
         if (bad_input) call error_bad_input()
     end subroutine get_time_prop_input
 
+    subroutine get_RKH_input(input_file)
+        character(len=*), intent(in) :: input_file
+
+        logical :: bad_input
+
+        open(unit=1,file=input_file,action='read')
+        read(1,nml=RKH_input)
+        close(1)
+
+        bad_input = .false.
+
+        basis_dir = trim(basis_input_dir)
+        if (.not.is_dir(basis_dir)) then
+            write(stderr,*)
+            write(stderr,*) "Error! The basis_input_dir you supplied: ", basis_dir, " does not exist."
+            write(stderr,*) "You need to supply an exisiting directory to the basis_input_dir variable in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        RKH_root_dir = trim(RKH_output_dir)//'/'
+        if (.not.is_dir(RKH_root_dir)) then
+            write(stderr,*)
+            write(stderr,*) "Error! The RKH_output_dir you supplied: ", RKH_output_dir, " does not exist."
+            write(stderr,*) "You need to supply an exisiting directory to the RKH_output_dir variable in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (any(r_limits<0)) then
+            write(stderr,*)
+            write(stderr,*) "Error! Bad r_limits input: ", r_limits
+            write(stderr,*) "You need to supply positive values for r_limits in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (N_r<1) then
+            write(stderr,*)
+            write(stderr,*) "Error! N_r < 1: ", N_r
+            write(stderr,*) "You need to supply N_r >= 1 in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (RKH_intensity<0) then
+            write(stderr,*)
+            write(stderr,*) "Error! RKH_intensity < 0: ", RKH_intensity
+            write(stderr,*) "You need to supply RKH_intensity < 0 in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (RKH_omega<0) then
+            write(stderr,*)
+            write(stderr,*) "Error! RKH_omega < 0: ", RKH_omega
+            write(stderr,*) "You need to supply RKH_omega < 0 in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        if (N_quasi<1) then
+            write(stderr,*)
+            write(stderr,*) "Error! N_quasi < 1: ", N_quasi
+            write(stderr,*) "You need to supply N_quasi >= 1 in the input file"
+            write(stderr,*)
+            bad_input = .true.
+        end if
+
+        write(stdout,*)
+        write(stdout,*) "Function evaluation input:"
+        write(stdout,nml=RKH_input)
+
+        if (bad_input) call error_bad_input()
+    end subroutine get_RKH_input
+
     subroutine handle_basis_and_ess_states(bad_input)
         logical, intent(inout) :: bad_input
 
@@ -719,6 +812,16 @@ contains
         close(unit)
     end subroutine write_time_prop_input
 
+    subroutine write_RKH_input(res_dir)
+        character(len=:), allocatable, intent(in) :: res_dir
+
+        integer :: unit
+
+        open(file = res_dir // 'RKH_input.dat', newunit = unit, action = 'write')
+        write(unit, nml = RKH_input)
+        close(unit)
+    end subroutine write_RKH_input
+
     subroutine set_basis_defaults()
         k = 6
         m = 3
@@ -820,6 +923,17 @@ contains
         ! Just set this so that check passes
         allocate(target_Floquet_blocks(n_relevant),source = 0)
     end subroutine set_time_prop_defaults
+
+    subroutine set_RKH_defaults()
+        basis_input_dir = "-"
+        RKH_output_dir = "-"
+        N_r = -1
+        r_limits = [-2.0_dp,-1.0_dp]
+        RKH_intensity = -1.0_dp
+        RKH_omega = -1.0_dp
+        n_quasi = -1
+        gs_energy = (0.0_dp,0.0_dp)
+    end subroutine set_RKH_defaults
 
     subroutine error_bad_input()
         write(stderr,*)
