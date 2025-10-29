@@ -27,7 +27,7 @@ subroutine setup_GL(N,a,b,x,w)
 end subroutine setup_GL
 
 subroutine init_gau_leg(this,breakpoints,N)
-    class(gau_leg), intent(inout) :: this
+    class(gau_leg), intent(out) :: this
     double precision, dimension(:), intent(in) :: breakpoints
     integer, intent(in) :: N
 

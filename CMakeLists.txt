@@ -22,6 +22,7 @@ include_directories("${CMAKE_BINARY_DIR}/src/quasienergies")
 include_directories("${CMAKE_BINARY_DIR}/src/diagonalization")
 include_directories("${CMAKE_BINARY_DIR}/src/function_eval")
 include_directories("${CMAKE_BINARY_DIR}/src/time_dep")
+include_directories("${CMAKE_BINARY_DIR}/src/RKH_frame")
 
 # Make sure color ouput is used by the build system for more readable error messages and warnings
 set(CMAKE_COLOR_DIAGNOSTICS ON)
@@ -79,6 +80,7 @@ add_subdirectory(src/quasienergies)
 add_subdirectory(src/diagonalization)
 add_subdirectory(src/function_eval)
 add_subdirectory(src/time_dep)
+add_subdirectory(src/RKH_frame)
 
 # Add executables
 add_executable(basis_setup src/apps/main_basis_setup.f90)
@@ -86,6 +88,7 @@ add_executable(quasi src/apps/main_quasienergies.f90)
 add_executable(diag src/apps/main_diagonalization.f90)
 add_executable(feval src/apps/main_eval_rad.f90)
 add_executable(time_prop src/apps/main_time_prop.f90)
+add_executable(RKH src/apps/main_RKH.f90)
 
 # Link libraries to executable
 target_link_libraries(basis_setup mat_els tools)
@@ -93,7 +96,8 @@ target_link_libraries(quasi quasienergies tools)
 target_link_libraries(diag diagonalization tools)
 target_link_libraries(feval function_eval tools)
 target_link_libraries(time_prop time_dep quasienergies tools)
+target_link_libraries(RKH RKH_frame tools)
 
 # Install executable in binary direcetory
-set(executables basis_setup quasi diag feval time_prop)
+set(executables basis_setup quasi diag feval time_prop RKH)
 install(TARGETS ${executables} DESTINATION bin)
