@@ -8,6 +8,7 @@ set(mat_els_files
 
 add_library(mat_els ${mat_els_files})
 
-target_link_libraries(mat_els tools)
+target_link_libraries(mat_els PRIVATE tools)
+target_link_libraries(mat_els PRIVATE project_options)
 
 install(TARGETS mat_els DESTINATION lib)

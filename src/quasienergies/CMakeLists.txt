@@ -11,5 +11,6 @@ add_library(quasienergies ${quasienergies_files})
 target_link_libraries(quasienergies PRIVATE fortran_stdlib::fortran_stdlib)
 target_link_libraries(quasienergies PRIVATE tools)
 target_link_libraries(quasienergies PRIVATE diagonalization)
+target_link_libraries(quasienergies PRIVATE project_options)
 
 install(TARGETS quasienergies DESTINATION lib)
