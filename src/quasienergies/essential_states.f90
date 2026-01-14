@@ -249,9 +249,9 @@ contains
 
                 write(stdout,'(a)', advance='no') ') '
             end do
-            write(stdout,*)''
+            write(stdout,'()')
         end do
-        write(stdout,*)''
+        write(stdout,'()')
 
         ! Workspace query for eigenvalues
         allocate(rwork(2*n_ess))

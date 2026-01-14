@@ -173,7 +173,7 @@ contains
             do j = 1,n_sym
                 write(unit, '(a,es25.17e3)', advance = 'no') ' ', U_r_vals(j,i)
             end do
-            write(unit,*) ''
+            write(unit,'()')
         end do
         close(unit)
 

@@ -113,6 +113,7 @@ contains
         call save_vec(1)
         do i = 1,N_t-1
             write(stdout,'(a,a,i0,a,i0)',advance='no') achar(13),'Timestep: ', i, '/', N_t
+            flush(unit=stdout)
             ! write(stdout,*) abs(ess_states(1)%projection(psi,S%blocks(ess_states(1)%block),full))**2
             call CN_step(t(i),psi,psi_new,A_t(i,:),E_t(i,:))
             call swap(psi,psi_new)
@@ -188,7 +189,7 @@ contains
             do j = 1,n_ess
                 write(unit,'(es25.17e3)', advance='no') abs(projs(i,j))**2
             end do
-            write(unit,*)''
+            write(unit,'()')
         end do
 
         close(unit)

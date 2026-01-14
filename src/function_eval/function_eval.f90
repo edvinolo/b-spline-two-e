@@ -116,7 +116,7 @@ contains
 
         ptr = 1
         do i = 1,bas%n_sym
-            write(unit,*)''
+            write(unit,'()')
             write(unit,'(I4,I4)') bas%syms(i)%l,bas%syms(i)%m
 
             coeffs = (0.0_dp,0.0_dp)
@@ -143,8 +143,7 @@ contains
                     write(unit,'(es24.17e3)', advance='no') aimag(val)
                 end if
 
-                write(unit,'(a)', advance='no') 'j) '
-                write(unit,*)''
+                write(unit,'(a)') 'j) '
             end do
 
         end do
@@ -173,7 +172,7 @@ contains
         end do
 
         do i = 1,bas%n_sym
-            write(unit,*)''
+            write(unit,'()')
             if (lm_basis) then
                 write(unit,'(I4,I4)') bas%syms(i)%l,bas%syms(i)%m
             else
@@ -200,8 +199,7 @@ contains
                     write(unit,'(es24.17e3)', advance='no') aimag(val)
                 end if
 
-                write(unit,'(a)', advance='no') 'j) '
-                write(unit,*)''
+                write(unit,'(a)') 'j) '
             end do
 
         end do
