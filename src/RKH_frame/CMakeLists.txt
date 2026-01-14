@@ -8,5 +8,6 @@ add_library(RKH_frame ${RKH_frame_files})
 target_link_libraries(RKH_frame PRIVATE fortran_stdlib::fortran_stdlib)
 target_link_libraries(RKH_frame PRIVATE tools)
 target_link_libraries(RKH_frame PRIVATE function_eval)
+target_link_libraries(RKH_frame PRIVATE project_options)
 
 install(TARGETS RKH_frame DESTINATION lib)

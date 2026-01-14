@@ -1,4 +1,5 @@
 module dir_tools
+    use stdlib_system, only: is_directory
     implicit none
 
 contains
@@ -6,7 +7,7 @@ contains
         character(len=:), allocatable, intent(in) :: dir
         logical :: res
 
-        inquire(file=dir,exist=res)
+        res = is_directory(dir)
     end function is_dir
 
     subroutine mkdir(dir)

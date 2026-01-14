@@ -382,9 +382,9 @@ contains
             do kk = 1,n_quasi
                 write(stdout,'(es24.17e3,a)',advance='no') abs(ess_projs(kk,j,i)), ' '
             end do
-            write(stdout,*)''
+            write(stdout,'()')
         end do
-        write(stdout,*)''
+        write(stdout,'()')
     end subroutine compute_projections
 
     subroutine cleanup_solvers()
@@ -521,7 +521,7 @@ contains
 
                 write(unit,'(a)', advance='no') 'j) '
             end do
-            write(unit,*)''
+            write(unit,'()')
         end do
 
         close(unit)
@@ -543,9 +543,9 @@ contains
                     do kk = 1,n_quasi
                         write(unit,'(es24.17e3,a)',advance = 'no') abs(ess_projs(kk,j,i)), ' '
                     end do
-                    write(unit,*)''
+                    write(unit,'()')
                 end do
-                write(unit,*)''
+                write(unit,'()')
             end do
 
             close(unit)
@@ -584,9 +584,9 @@ contains
 
                         write(unit,'(a)', advance='no') 'j) '
                     end do
-                    write(unit,*)''
+                    write(unit,'()')
                 end do
-                write(unit,*)''
+                write(unit,'()')
             end do
 
             close(unit)
@@ -897,12 +897,12 @@ contains
         vecs(:,:,i) = vecs_i
         eigs(:,i) = eigs_i
 
-        write(stdout,*) ''
+        write(stdout,'()')
         write(stdout,*) 'Reordered eigenvalues with projections:'
         do j=1,n_quasi
             write(stdout,*) eigs(j,i), projs(j)
         end do
-        write(stdout,*) ''
+        write(stdout,'()')
     end subroutine reorder_proj
 
     subroutine start_timer()

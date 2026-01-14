@@ -25,6 +25,7 @@ target_link_libraries(tools PRIVATE fortran_stdlib::fortran_stdlib)
 target_link_libraries(tools PRIVATE MKL::MKL)
 target_link_libraries(tools PRIVATE GSL::gsl)
 target_link_libraries(tools PRIVATE ARPACK::ARPACK)
+target_link_libraries(tools PRIVATE project_options)
 
 if (feast)
     target_link_libraries(tools PRIVATE ${feast})

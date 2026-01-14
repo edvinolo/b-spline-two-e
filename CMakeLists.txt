@@ -27,27 +27,72 @@ include_directories("${CMAKE_BINARY_DIR}/src/RKH_frame")
 # Make sure color ouput is used by the build system for more readable error messages and warnings
 set(CMAKE_COLOR_DIAGNOSTICS ON)
 
+# Set allowed config types
+set(ALLOWED_CONFIGS Debug Sanitize Release RelWithDebInfo)
+if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING
+        "Choose the type of build" FORCE
+    )
+endif ()
+set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${ALLOWED_CONFIGS})
+message(STATUS "Selected CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+
+# Set compiler flags for compilers and build types
+add_library(project_options INTERFACE)
+
 # Set compiler flags that should always be on
-add_compile_options(-Wall -fopenmp -cpp)
-add_compile_options(-fdefault-integer-8) # Use 64-bit integers
-add_link_options(-fopenmp)
+target_compile_options(project_options INTERFACE
+    # GNU Fortran
+    $<$<Fortran_COMPILER_ID:GNU>:
+        -Wall
+        -cpp
+        -fdefault-integer-8>
+
+    # Intel ifx
+    $<$<Fortran_COMPILER_ID:IntelLLVM>:
+        -warn all
+        -fpp
+        -i8>
+)
 
 # Set flags for compilation choices
-if (CMAKE_BUILD_TYPE STREQUAL "debug")
-    add_compile_options(-O0 -fcheck=all -g -fbacktrace)
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(project_options INTERFACE
+        $<$<Fortran_COMPILER_ID:GNU>: -O0 -fcheck=all -g -fbacktrace>
+        $<$<Fortran_COMPILER_ID:IntelLLVM>: -O0 -g -check all -traceback>
+    )
+elseif(CMAKE_BUILD_TYPE STREQUAL "Sanitize")
+    target_compile_options(project_options INTERFACE
+        $<$<Fortran_COMPILER_ID:GNU>: -O0 -g -fsanitize=address -fno-omit-frame-pointer -fbacktrace>
+        $<$<Fortran_COMPILER_ID:IntelLLVM>: -O0 -g -fsanitize=address -fno-omit-frame-pointer -traceback>
+    )
+    target_link_options(project_options INTERFACE
+        -fsanitize=address
+    )
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(project_options INTERFACE
+        $<$<Fortran_COMPILER_ID:GNU>: -O3 -march=native -mtune=native>
+        $<$<Fortran_COMPILER_ID:IntelLLVM>: -O3 -xHost>
+    )
+elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    target_compile_options(project_options INTERFACE
+        $<$<Fortran_COMPILER_ID:GNU>: -O3 -march=native -mtune=native -g -fbacktrace>
+        $<$<Fortran_COMPILER_ID:IntelLLVM>: -O3 -xHost -g -traceback>
+    )
 else()
-    add_compile_options(-O3 -march=native -mtune=native)
+    message(FATAL_ERROR
+        "Unknown CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}\n"
+        "CMAKE_BUILD_TYPE should be one of: ${ALLOWED_CONFIGS}"
+    )
 endif()
+
+# Make sure OpenMP flags are set
+find_package(OpenMP REQUIRED)
+target_link_libraries(project_options INTERFACE OpenMP::OpenMP_Fortran)
 
 option(USE_DEBUG_PARDISO "Enable debugging mode of PARDISO" OFF)
 if (USE_DEBUG_PARDISO)
     add_compile_definitions(DEBUG_PARDISO)
-endif()
-
-# Enable address sanitizer for gcc
-if (CMAKE_USE_ASAN)
-        add_compile_options(-fsanitize=address)
-        add_link_options(-fsanitize=address)
 endif()
 
 # Tell MKL to use 32-bit integer interface
@@ -68,9 +113,12 @@ find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
 
 # Check if FEAST is available
-find_library(feast NAMES feast PATHS "$ENV{FEASTROOT}/lib/x64/")
-if (feast)
-    add_compile_definitions(WITH_FEAST)
+option(USE_FEAST "Enable FEAST" OFF)
+if (USE_FEAST)
+    find_library(feast NAMES feast PATHS "$ENV{FEASTROOT}/lib/x64/")
+    if (feast)
+        add_compile_definitions(WITH_FEAST)
+    endif()
 endif()
 
 # Add subdirectories
@@ -91,12 +139,12 @@ add_executable(time_prop src/apps/main_time_prop.f90)
 add_executable(RKH src/apps/main_RKH.f90)
 
 # Link libraries to executable
-target_link_libraries(basis_setup mat_els tools)
-target_link_libraries(quasi quasienergies tools)
-target_link_libraries(diag diagonalization tools)
-target_link_libraries(feval function_eval tools)
-target_link_libraries(time_prop time_dep quasienergies tools)
-target_link_libraries(RKH RKH_frame tools)
+target_link_libraries(basis_setup PRIVATE mat_els tools project_options)
+target_link_libraries(quasi PRIVATE quasienergies tools project_options)
+target_link_libraries(diag PRIVATE diagonalization tools project_options)
+target_link_libraries(feval PRIVATE function_eval tools project_options)
+target_link_libraries(time_prop PRIVATE time_dep quasienergies tools project_options)
+target_link_libraries(RKH PRIVATE RKH_frame tools project_options)
 
 # Install executable in binary direcetory
 set(executables basis_setup quasi diag feval time_prop RKH)

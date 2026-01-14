@@ -53,7 +53,6 @@ module sparse_array_tools
         type(ptr_type) :: entry
         type(open_hashmap_type) :: map
         real(dp), allocatable :: data(:)
-        class(*), allocatable :: ptr
         integer(int8), allocatable :: indices(:)
     contains
         procedure :: init => init_Nd_DOK
@@ -513,12 +512,12 @@ contains
         real(dp), intent(in) :: val(:)
 
         logical(int32) :: exists
+        class(*), allocatable :: temp
 
         this%indices = transfer(indices,[0_int8])
 
         call this%map%key_test(this%indices,exists)
 
-        associate (temp => this%ptr)
         if (exists) then
             call this%map%get_other_data(this%indices,temp)
             select type (temp)
@@ -532,8 +531,6 @@ contains
             call this%map%map_entry(this%indices,this%entry)
             this%entry%ptr = this%entry%ptr + this%N_val
         end if
-        end associate
-
     end subroutine set_val_Nd_DOK
 
     subroutine get_val_Nd_DOK(this,indices,values)
