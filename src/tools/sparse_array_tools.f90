@@ -543,7 +543,9 @@ contains
 
         key = transfer(indices,[0_int8])
 
+        !$omp critical(hashmap)
         call this%map%get_other_data(key,temp)
+        !$omp end critical(hashmap)
         select type (temp)
         type is (ptr_type)
             values = this%data(temp%ptr:temp%ptr+this%N_val-1)
