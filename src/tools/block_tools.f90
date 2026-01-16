@@ -567,29 +567,31 @@ contains
         call res%scale(alpha)
     end function CS_block_diag_scalar_mult
 
-    subroutine CS_block_shift_B(this,shift,B)
+    subroutine CS_block_shift_B(this,shift,B,B_subset)
         class(block_CS), intent(inout) :: this
         complex(dp), intent(in) :: shift
         class(block_CS), intent(in) :: B
+        logical, intent(in) :: B_subset
 
         integer i,j
 
         do i = 1,this%block_shape(2)
             do j = 1,this%block_shape(1)
-                call this%blocks(j,i)%shift_B(shift,B%blocks(j,i))
+                call this%blocks(j,i)%shift_B(shift,B%blocks(j,i),B_subset)
             end do
         end do
     end subroutine CS_block_shift_B
 
-    subroutine CS_block_diag_shift_B(this,shift,B)
+    subroutine CS_block_diag_shift_B(this,shift,B,B_subset)
         class(block_diag_CS), intent(inout) :: this
         complex(dp), intent(in) :: shift
         class(block_diag_CS), intent(in) :: B
+        logical, intent(in) :: B_subset
 
         integer i
 
         do i = 1,this%block_shape(1)
-            call this%blocks(i)%shift_B(shift,B%blocks(i))
+            call this%blocks(i)%shift_B(shift,B%blocks(i),B_subset)
         end do
     end subroutine CS_block_diag_shift_B
 
@@ -693,10 +695,11 @@ contains
         !$omp end parallel do
     end subroutine CS_A_P_block_X
 
-    subroutine CS_A_diag_B_P_diag_X(X,alpha,B)
+    subroutine CS_A_diag_B_P_diag_X(X,alpha,B,B_subset)
         type(block_diag_CS), intent(inout) :: X
         double complex, dimension(:), intent(in) :: alpha
         type(block_diag_CS), intent(in) :: B
+        logical, intent(in) :: B_subset
 
         integer :: i
 
@@ -707,15 +710,16 @@ contains
 
         !!$omp parallel do
         do i = 1,X%block_shape(1)
-            call X%blocks(i)%shift_B(alpha(i),B%blocks(i))
+            call X%blocks(i)%shift_B(alpha(i),B%blocks(i),B_subset)
         end do
         !!$omp end parallel do
     end subroutine CS_A_diag_B_P_diag_X
 
-    subroutine CS_A_diag_B_P_block_X(X,alpha,B)
+    subroutine CS_A_diag_B_P_block_X(X,alpha,B,B_subset)
         type(block_CS), intent(inout) :: X
         double complex, dimension(:), intent(in) :: alpha
         type(block_diag_CS), intent(in) :: B
+        logical, intent(in) :: B_subset
 
         integer :: i
 
@@ -726,15 +730,16 @@ contains
 
         !!$omp parallel do
         do i = 1,X%block_shape(1)
-            call X%blocks(i,i)%shift_B(alpha(i),B%blocks(i))
+            call X%blocks(i,i)%shift_B(alpha(i),B%blocks(i),B_subset)
         end do
         !!$omp end parallel do
     end subroutine CS_A_diag_B_P_block_X
 
-    subroutine CS_A_block_B_P_block_X(X,alpha,B)
+    subroutine CS_A_block_B_P_block_X(X,alpha,B,B_subset)
         type(block_CS), intent(inout) :: X
         double complex, dimension(:,:), intent(in) :: alpha
         type(block_CS), intent(in) :: B
+        logical, intent(in) :: B_subset
 
         integer :: i,j
 
@@ -751,7 +756,7 @@ contains
         !!$omp parallel do private(i)
         do j = 1,X%block_shape(2)
             do i = 1,X%block_shape(1)
-                call X%blocks(i,j)%shift_B(alpha(i,j),B%blocks(i,j))
+                call X%blocks(i,j)%shift_B(alpha(i,j),B%blocks(i,j),B_subset)
             end do
         end do
         !!$omp end parallel do

@@ -1,4 +1,5 @@
 module hamiltonian
+    use kind_tools
     use block_tools
     use sparse_array_tools
     use orbital_tools
@@ -103,7 +104,7 @@ contains
         write(6,*) 'Time to construct H_block (s): ', t_2-t_1
     end subroutine construct_block
 
-    subroutine construct_block_tensor(H,S,b_splines,term,max_k,R_k,H_sp,S_sp,full)
+    subroutine construct_block_tensor(H,S,b_splines,term,max_k,R_k,H_sp,S_sp,full,drop_tol)
         type(block), dimension(:), allocatable, intent(in) :: H
         double complex, dimension(:,:), intent(in) :: S
         type(b_spline), intent(in) :: b_splines
@@ -112,6 +113,7 @@ contains
         type(Nd_DOK), intent(inout) :: R_k
         type(CSR_matrix), intent(out) :: H_sp,S_sp
         logical, intent(in) :: full
+        real(dp), intent(in) :: drop_tol
 
         logical :: both
         integer, target :: i,one
@@ -278,18 +280,22 @@ contains
             !!$omp end parallel do
         end if
 
+        call H_sp%drop(drop_tol)
+        call S_sp%drop(drop_tol)
+
         t_2 = omp_get_wtime()
         write(6,*) 'Time to construct H_block (s): ', t_2-t_1
     end subroutine construct_block_tensor
 
 
-    subroutine construct_block_1p(H,S,b_splines,term,H_sp,S_sp,full)
+    subroutine construct_block_1p(H,S,b_splines,term,H_sp,S_sp,full,drop_tol)
         type(block), dimension(:), allocatable, intent(in) :: H
         double complex, dimension(:,:), intent(in) :: S
         type(b_spline), intent(in) :: b_splines
         type(sym), intent(in) :: term
         type(CSR_matrix), intent(out) :: H_sp,S_sp
         logical, intent(in) :: full
+        real(dp), intent(in) :: drop_tol
 
         integer, target :: i,one
         integer, pointer :: low
@@ -340,6 +346,9 @@ contains
             H_sp%index_ptr(i+1) = row_ptr
             S_sp%index_ptr(i+1) = row_ptr
         end do
+
+        call H_sp%drop(drop_tol)
+        call S_sp%drop(drop_tol)
 
         t_2 = omp_get_wtime()
         write(6,*) 'Time to construct H_block (s): ', t_2-t_1

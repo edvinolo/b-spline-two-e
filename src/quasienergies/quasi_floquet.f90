@@ -69,7 +69,7 @@ contains
 
     end subroutine setup_dip_floquet
 
-    subroutine setup_H_floquet(H_block,bas, H_0, S_block, D, omega, shift, V_0)
+    subroutine setup_H_floquet(H_block,bas, H_0, S_block, D, omega, shift, V_0, B_subset)
         type(block_CS), intent(inout) :: H_block
         type(basis), intent(in) :: bas
         type(block_diag_CS), intent(in) ::  H_0
@@ -78,6 +78,7 @@ contains
         real(dp), intent(in) :: omega
         complex(dp), intent(in) :: shift
         real(dp), intent(in) :: V_0
+        logical, intent(in) :: B_subset
 
         complex(dp), allocatable :: shifts(:)
         integer :: n,i,j,ptr
@@ -94,7 +95,7 @@ contains
             end if
         end do
 
-        call APX(A_0,shifts,S_block)
+        call APX(A_0,shifts,S_block,B_subset)
 
         deallocate(shifts)
         allocate(shifts(n),source = (0.0_dp,0.0_dp))
@@ -104,7 +105,7 @@ contains
             do j = 1,H_0%block_shape(1)
                 H_0_block%blocks(ptr) = A_0%blocks(j)
                 shifts(ptr) = 2*i*omega
-                call H_0_block%blocks(ptr)%shift_B(shifts(ptr),S_block%blocks(j))
+                call H_0_block%blocks(ptr)%shift_B(shifts(ptr),S_block%blocks(j),B_subset)
                 ptr = ptr + 1
             end do
         end do

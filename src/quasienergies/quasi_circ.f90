@@ -28,7 +28,7 @@ contains
         end do
     end subroutine setup_dip_circ
 
-    subroutine setup_H_circ(H_block, bas, H_0, S, D, omega, shift, V_0)
+    subroutine setup_H_circ(H_block, bas, H_0, S, D, omega, shift, V_0, B_subset)
         type(block_CS), intent(inout) :: H_block
         type(basis), intent(in) :: bas
         type(block_diag_CS), intent(in) ::  H_0
@@ -37,6 +37,7 @@ contains
         real(dp), intent(in) :: omega
         complex(dp), intent(in) :: shift
         real(dp), intent(in) :: V_0
+        logical, intent(in) :: B_subset
 
         complex(dp) :: shifts(bas%n_sym)
 
@@ -44,6 +45,6 @@ contains
         call H_block%compute_shape()
 
         shifts = -omega*bas%syms%m - shift
-        call APX(H_block, shifts, S)
+        call APX(H_block, shifts, S, B_subset)
     end subroutine setup_H_circ
 end module quasi_circ

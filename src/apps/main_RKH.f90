@@ -80,7 +80,7 @@ program main_RKH
     call write_adiabatic_potentials(RKH_res_dir)
 
     call CAP_c%init(CAP_order,CAP_r_0,CAP_eta)
-    call setup_shift_Coul_Ham(H_block,S_block,RKH_omega,gs_energy,bas,CAP_c,k_GL,splines)
+    call setup_shift_Coul_Ham(H_block,S_block,RKH_omega,gs_energy,bas,CAP_c,k_GL,splines,B_subset)
     call compute_RKH_energies(H_block,S_block,gs_energy,bas,n_quasi,splines,RKH_res_dir)
 
 

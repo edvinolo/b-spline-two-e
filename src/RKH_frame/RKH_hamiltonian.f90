@@ -273,7 +273,7 @@ contains
 
     end subroutine shift_Coul_Ham_diag_block
 
-    subroutine setup_shift_Coul_Ham(H_block,S_block,omega,shift,bas,CAP_c,k_GL,b_splines)
+    subroutine setup_shift_Coul_Ham(H_block,S_block,omega,shift,bas,CAP_c,k_GL,b_splines,B_subset)
         type(block_CS), intent(out) :: H_block
         type(block_diag_CS), intent(in) :: S_block
         real(dp), intent(in) :: omega
@@ -282,6 +282,7 @@ contains
         type(CAP), intent(in) :: CAP_c
         integer, intent(in) :: k_GL
         type(b_spline), intent(in) :: b_splines
+        logical, intent(in) :: B_subset
 
         integer :: i,j
         type(sym) :: syms(2)
@@ -311,7 +312,7 @@ contains
         ! Shift diagonal blocks
         shifts = -bas%syms%m*omega - shift
         ! shifts = -shift
-        call APX(H_block,shifts,S_block)
+        call APX(H_block,shifts,S_block,B_subset)
 
     end subroutine setup_shift_Coul_Ham
 

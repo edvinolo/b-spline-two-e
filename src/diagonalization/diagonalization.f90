@@ -101,7 +101,7 @@ contains
         end if
 
         H_i = H
-        call H_i%shift_B(-target,S)
+        call H_i%shift_B(-target,S,B_subset)
 
         call solver%setup(H_i%shape(1),H_i%nnz,H_i%data,H_i%index_ptr,H_i%indices,full)
         call solver%factor(H_i%data,H_i%index_ptr,H_i%indices)

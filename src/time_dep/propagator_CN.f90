@@ -39,7 +39,7 @@ contains
     ! provided that the "diagonal" preconditioner is sufficiently good (which is hopefully true). In that case, need to ensure that the iterative solver
     ! has access to the correct matvec.
 
-    subroutine init_CN(pulses_in,pol_active_in,dt_in,H_0_block,S_block,dip,full_in)
+    subroutine init_CN(pulses_in,pol_active_in,dt_in,H_0_block,S_block,dip,full_in,B_subset)
         type(pulse), intent(in) :: pulses_in(:)
         logical, intent(in) :: pol_active_in(3)
         real(dp), intent(in) :: dt_in
@@ -47,6 +47,7 @@ contains
         type(block_diag_CS), intent(inout) :: S_block
         type(block_CS), intent(inout) :: dip(-1:1)
         logical, intent(in) :: full_in
+        logical, intent(in) :: B_subset
 
         n_pulses = size(pulses_in)
         pulses = pulses_in
@@ -56,7 +57,7 @@ contains
 
         n = H_0_block%shape(1)
         allocate(temp_vec(n,3),temp_x(n),temp_y(n),temp(n))
-        call setup_A_and_B(H_0_block,S_block)
+        call setup_A_and_B(H_0_block,S_block,B_subset)
 
         call setup_dipole(dip)
 
@@ -210,17 +211,18 @@ contains
         backward_factor = -forward_factor
     end subroutine set_factors
 
-    subroutine setup_A_and_B(H_0_block,S_Block)
+    subroutine setup_A_and_B(H_0_block,S_Block,B_subset)
         type(block_diag_CS), intent(inout) :: H_0_block
         type(block_diag_CS), intent(inout) :: S_block
+        logical, intent(in) :: B_subset
 
         A_block = forward_factor*H_0_block
         B_block = backward_factor*H_0_block
 
         call H_0_block%deall()
 
-        call A_block%shift_B((1.0_dp,0.0_dp),S_block)
-        call B_block%shift_B((1.0_dp,0.0_dp),S_block)
+        call A_block%shift_B((1.0_dp,0.0_dp),S_block,B_subset)
+        call B_block%shift_B((1.0_dp,0.0_dp),S_block,B_subset)
 
         ! call S_block%deall()
 

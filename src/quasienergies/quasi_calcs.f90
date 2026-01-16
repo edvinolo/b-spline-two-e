@@ -284,12 +284,12 @@ contains
 
         if (z_pol) then
             if (calc_type == 'static') then
-                call setup_H_static(H_block, bas, H_0, S_block, D, shift_i, V_0_i)
+                call setup_H_static(H_block, bas, H_0, S_block, D, shift_i, V_0_i, B_subset)
             else
-                call setup_H_floquet(H_block, bas, H_0, S_block, D, omega_i, shift_i, V_0_i)
+                call setup_H_floquet(H_block, bas, H_0, S_block, D, omega_i, shift_i, V_0_i, B_subset)
             end if
         else
-            call setup_H_circ(H_block, bas, H_0, S_block, D, omega_i, shift_i, V_0_i)
+            call setup_H_circ(H_block, bas, H_0, S_block, D, omega_i, shift_i, V_0_i, B_subset)
         end if
 
         if (block_precond) then

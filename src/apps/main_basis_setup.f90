@@ -105,9 +105,10 @@ program main_basis_setup
     !$omp parallel do
     do i = 1,bas%n_sym
         if (two_el) then
-            call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,R_p,H_diag%blocks(i),S_diag%blocks(i),full)
+            call construct_block_tensor(H_vec,S,splines,bas%syms(i),max_k,R_p,H_diag%blocks(i),&
+                                        S_diag%blocks(i),full,drop_tol)
         else
-            call construct_block_1p(H_vec,S,splines,bas%syms(i),H_diag%blocks(i),S_diag%blocks(i),full)
+            call construct_block_1p(H_vec,S,splines,bas%syms(i),H_diag%blocks(i),S_diag%blocks(i),full,drop_tol)
         end if
 
         write(6,'(a,i0,a,es0.4)') "Density H(", i,"): ", real(H_diag%blocks(i)%nnz,kind=dp)/(H_diag%blocks(i)%shape(1)**2)
@@ -137,9 +138,9 @@ program main_basis_setup
                 end if
                 syms(1) = bas%syms(i)
                 if (two_el) then
-                    call construct_dip_block_tensor(syms,q,splines,S,radial_dip,dipoles(q)%blocks(i,j),compute)
+                    call construct_dip_block_tensor(syms,q,splines,S,radial_dip,dipoles(q)%blocks(i,j),compute,drop_tol)
                 else
-                    call construct_dip_block_1p(syms,q,splines,radial_dip,dipoles(q)%blocks(i,j),compute)
+                    call construct_dip_block_1p(syms,q,splines,radial_dip,dipoles(q)%blocks(i,j),compute,drop_tol)
                 end if
             end do
         end do
