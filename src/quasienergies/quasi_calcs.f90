@@ -764,7 +764,7 @@ contains
         type(CSR_matrix), allocatable :: H_temp(:),S_temp(:)
         type(CSR_matrix), allocatable :: D_temp(:,:)
 
-        allocate(H_temp(n_relevant),S_temp(n_relevant),D_temp(n_relevant,n_relevant))
+        allocate(H_temp(n_relevant),S_temp(n_relevant))!,D_temp(n_relevant,n_relevant))
 
         bas%n_sym = n_relevant
         bas%syms = bas%syms(relevant_blocks)
@@ -796,6 +796,7 @@ contains
         call S_block%compute_shape()
 
         do id = 1,3
+            allocate(D_temp(n_relevant,n_relevant))
             D(id)%block_shape = [n_relevant,n_relevant]
             do j = 1,n_relevant
                 do i = 1,n_relevant
