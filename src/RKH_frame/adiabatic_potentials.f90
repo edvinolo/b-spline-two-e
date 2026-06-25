@@ -27,7 +27,7 @@ contains
         integer, intent(in) :: k
         real(dp) :: res
 
-        if (r>r_0) then
+        if (r>r_0_in) then
             res = r_0_in**k/r**(k+1)
         else
             res = r**k/r_0_in**(k+1)
