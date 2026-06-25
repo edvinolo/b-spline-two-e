@@ -70,6 +70,7 @@ module sparse_array_tools
         procedure :: init => init_CS
         procedure :: enter => enter_CS
         procedure :: convert => convert_CS
+        procedure :: drop => drop_CS
         procedure :: transp => transpose_CS
         procedure :: arrays_allocated
         procedure :: deall => deall_CS
@@ -660,6 +661,41 @@ contains
         A%index_ptr(1) = 1
     end subroutine convert_CS
 
+    subroutine drop_CS(this,drop_tol)
+        class(CS_matrix), intent(inout) :: this
+        real(dp), intent(in) :: drop_tol
+
+        integer :: nnz,i,j,ptr
+        integer, allocatable :: index_ptr_new(:), indices_new(:)
+        complex(dp), allocatable :: data_new(:)
+
+        if (drop_tol <= 0_dp) return
+
+        allocate(index_ptr_new(this%ptr_size()),data_new(this%nnz),indices_new(this%nnz))
+
+        nnz = 0
+        ptr = 1
+        index_ptr_new(1) = ptr
+        do i = 1,this%ptr_size()-1
+            do j = this%index_ptr(i), this%index_ptr(i+1)-1
+                if (abs(this%data(j)) > drop_tol) then
+                    data_new(ptr) = this%data(j)
+                    indices_new(ptr) = this%indices(j)
+                    nnz = nnz + 1
+                    ptr = ptr + 1
+                end if
+            end do
+            index_ptr_new(i+1) = ptr
+        end do
+
+        this%nnz = nnz
+        this%index_ptr = index_ptr_new
+        deallocate(this%indices,this%data)
+        allocate(this%indices(this%nnz),this%data(this%nnz))
+        this%indices = indices_new(:this%nnz)
+        this%data = data_new(:this%nnz)
+    end subroutine drop_CS
+
     subroutine transpose_CS(this,A)
         class(CS_matrix), intent(in) :: this
         class(CS_matrix), intent(out) :: A
@@ -861,39 +897,117 @@ contains
     end subroutine shift_CS
 
     ! Perform A = A + shift*B, where B's sparsity pattern is a subset of A's.
-    subroutine shift_B_CS(this,shift,B)
+    subroutine shift_B_CS(this,shift,B,B_subset)
         class(CS_matrix), intent(inout) :: this
         double complex, intent(in) :: shift
         class(CS_matrix), intent(in) :: B
+        logical, intent(in) :: B_subset
 
         integer :: i, ptr_a, ptr_b
+        integer :: nnz, ptr, ptr_next
+        class(CS_matrix), allocatable :: C
 
         if (.not.same_type_as(this,B)) then
-            write(6,*) "Error in shift_B_CS! B must have same type as this"
-            stop
+            error stop "Error in shift_B_CS! B must have same type as this"
         end if
 
         if (any(this%shape /= B%shape)) then
-            write(6,*) "Error in shift_B_CS! this and B must have same shape"
-            stop
+            error stop "Error in shift_B_CS! this and B must have same shape"
         end if
 
-        if (this%nnz < B%nnz) then
-            write(6,*) "Error in shift_B_CS! this%nnz must be >= B%nnz"
-            stop
-        end if
+        select type(this)
+        type is (CSR_matrix)
+            allocate(CSR_matrix :: C)
+        type is (CSC_matrix)
+            allocate(CSC_matrix :: C)
+        class default
+            error stop "Error in shift_B_CS! Unknown dynamic type of this!"
+        end select
 
-        !!$omp parallel do private(ptr_a,ptr_b)
-        do i = 1,this%ptr_size()-1
-            ptr_b = B%index_ptr(i)
-            do ptr_a = this%index_ptr(i),this%index_ptr(i+1)-1
-                if (this%indices(ptr_a) == B%indices(ptr_b)) then
-                    this%data(ptr_a) = this%data(ptr_a) + shift*B%data(ptr_b)
-                    ptr_b = ptr_b + 1
+        if (B_subset) then
+            if (this%nnz < B%nnz) then
+                error stop "Error in shift_B_CS! this%nnz must be >= B%nnz"
+            end if
+
+            !!$omp parallel do private(ptr_a,ptr_b)
+            do i = 1,this%ptr_size()-1
+                ptr_b = B%index_ptr(i)
+                do ptr_a = this%index_ptr(i),this%index_ptr(i+1)-1
+                    if (this%indices(ptr_a) == B%indices(ptr_b)) then
+                        this%data(ptr_a) = this%data(ptr_a) + shift*B%data(ptr_b)
+                        ptr_b = ptr_b + 1
+                    end if
+                end do
+            end do
+            !!$omp end parallel
+        else
+            nnz = 0
+
+            do i = 1,this%ptr_size()-1
+                ptr_a = this%index_ptr(i)
+                ptr_b = B%index_ptr(i)
+                do while((ptr_a < this%index_ptr(i+1)).and.(ptr_b < B%index_ptr(i+1)))
+                    if (this%indices(ptr_a) == B%indices(ptr_b)) then
+                        ptr_a = ptr_a + 1
+                        ptr_b = ptr_b + 1
+                    else if (this%indices(ptr_a) < B%indices(ptr_b)) then
+                        ptr_a = ptr_a + 1
+                    else
+                        ptr_b = ptr_b + 1
+                    end if
+                    nnz = nnz + 1
+                end do
+                if (ptr_a < this%index_ptr(i+1)) then
+                    nnz = nnz + (this%index_ptr(i+1) - ptr_a)
+                else if(ptr_b < B%index_ptr(i+1)) then
+                    nnz = nnz + (B%index_ptr(i+1) - ptr_b)
                 end if
             end do
-        end do
-        !!$omp end parallel
+
+            call C%init(this%shape,nnz)
+
+            ptr = 1
+            C%index_ptr(1) = ptr
+            do i = 1,this%ptr_size()-1
+                ptr_a = this%index_ptr(i)
+                ptr_b = B%index_ptr(i)
+                do while((ptr_a < this%index_ptr(i+1)).and.(ptr_b < B%index_ptr(i+1)))
+                    if (this%indices(ptr_a) == B%indices(ptr_b)) then
+                        C%data(ptr) = this%data(ptr_a) + shift*B%data(ptr_b)
+                        C%indices(ptr) = this%indices(ptr_a)
+                        ptr_a = ptr_a + 1
+                        ptr_b = ptr_b + 1
+                    else if (this%indices(ptr_a) < B%indices(ptr_b)) then
+                        C%data(ptr) = this%data(ptr_a)
+                        C%indices(ptr) = this%indices(ptr_a)
+                        ptr_a = ptr_a + 1
+                    else
+                        C%data(ptr) = shift*B%data(ptr_b)
+                        C%indices(ptr) = B%indices(ptr_b)
+                        ptr_b = ptr_b + 1
+                    end if
+                    ptr = ptr + 1
+                end do
+                if (ptr_a < this%index_ptr(i+1)) then
+                    ptr_next = ptr + (this%index_ptr(i+1) - ptr_a)
+                    C%data(ptr:ptr_next-1) = this%data(ptr_a:this%index_ptr(i+1)-1)
+                    C%indices(ptr:ptr_next-1) = this%indices(ptr_a:this%index_ptr(i+1)-1)
+                    ptr = ptr_next
+                else if (ptr_b < B%index_ptr(i+1)) then
+                    ptr_next = ptr + (B%index_ptr(i+1) - ptr_b)
+                    C%data(ptr:ptr_next-1) = shift*B%data(ptr_b:B%index_ptr(i+1)-1)
+                    C%indices(ptr:ptr_next-1) = B%indices(ptr_b:B%index_ptr(i+1)-1)
+                    ptr = ptr_next
+                end if
+
+                C%index_ptr(i+1) = ptr
+            end do
+
+            this%nnz = nnz
+            call move_alloc(C%index_ptr,this%index_ptr)
+            call move_alloc(C%indices,this%indices)
+            call move_alloc(C%data,this%data)
+        end if
     end subroutine shift_B_CS
 
     subroutine scale_CS(this, alpha)

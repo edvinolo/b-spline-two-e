@@ -77,7 +77,7 @@ contains
 
         S = S_block
 
-        call init_CN(pulses,pol_active,dt,H_0_block,S_block,dip,full)
+        call init_CN(pulses,pol_active,dt,H_0_block,S_block,dip,full,B_subset)
     end subroutine init_CN_propagator
 
     subroutine init_psi(bas)

@@ -1,11 +1,12 @@
 module dipole
+    use kind_tools
     use bspline_tools
     use orbital_tools
     use mat_els
     implicit none
 
 contains
-    subroutine construct_dip_block_tensor(syms,q,b_splines,S,radial_dip,dip_block,compute)
+    subroutine construct_dip_block_tensor(syms,q,b_splines,S,radial_dip,dip_block,compute,drop_tol)
         type(sym), dimension(2), intent(in) :: syms
         integer, intent(in) :: q
         type(b_spline), intent(in) :: b_splines
@@ -13,6 +14,7 @@ contains
         type(radial_dipole), intent(in) :: radial_dip
         type(CSR_matrix), intent(out) :: dip_block
         logical, intent(in) :: compute
+        real(dp), intent(in) :: drop_tol
 
         double precision :: ang
         logical :: parity_allowed
@@ -44,15 +46,18 @@ contains
             end do
         end do
         !!$omp end parallel do
+
+        call dip_block%drop(drop_tol)
     end subroutine construct_dip_block_tensor
 
-    subroutine construct_dip_block_1p(syms,q,b_splines,radial_dip,dip_block,compute)
+    subroutine construct_dip_block_1p(syms,q,b_splines,radial_dip,dip_block,compute,drop_tol)
         type(sym), dimension(2), intent(in) :: syms
         integer, intent(in) :: q
         type(b_spline), intent(in) :: b_splines
         type(radial_dipole), intent(in) :: radial_dip
         type(CSR_matrix), intent(out) :: dip_block
         logical, intent(in) :: compute
+        real(dp), intent(in) :: drop_tol
 
         double precision :: ang
         logical :: parity_allowed
@@ -82,6 +87,8 @@ contains
             end do
         end do
         !!$omp end parallel do
+
+        call dip_block%drop(drop_tol)
     end subroutine construct_dip_block_1p
 
     subroutine init_dip_block(syms,b_splines,dip_block)

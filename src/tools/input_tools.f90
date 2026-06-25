@@ -20,6 +20,10 @@ module input_tools
     logical :: full
     logical :: two_el
 
+    real(dp) :: drop_tol
+    logical :: drop
+    logical :: B_subset
+
     namelist /basis_input/ &
     & basis_output_dir,&
     & k,&
@@ -40,7 +44,8 @@ module input_tools
     & gauge,&
     & z_pol,&
     & full, &
-    & two_el
+    & two_el,&
+    & drop_tol
 
     ! Quasienergy input variables
     character(len=:), allocatable :: basis_dir
@@ -318,6 +323,9 @@ contains
             write(stderr,*)
             bad_input = .true.
         end if
+
+        drop = (0 < drop_tol)
+        B_subset = .not.drop
 
         write(stdout,*)
         write(stdout,*) "Basis setup input:"
@@ -841,6 +849,9 @@ contains
         z_pol = .true.
         full = .true.
         two_el = .true.
+        drop_tol = -1.0_dp
+        drop = .false.
+        B_subset = .true.
     end subroutine set_basis_defaults
 
     subroutine set_quasi_defaults()
