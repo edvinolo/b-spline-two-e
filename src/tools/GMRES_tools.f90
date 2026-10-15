@@ -174,7 +174,7 @@ module GMRES_tools
 
             ! ! Real part y_r = a*x_r - b*x_i
             stat = mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE,1.0_dp,this%a_mat,this%descr,&
-                                x(1:n),0.0_dp,y(n+1:))
+                                x(1:n),0.0_dp,y(1:n))
             stat = mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE,-1.0_dp,this%b_mat,this%descr,&
                                 x(n+1:),1.0_dp,y(1:n))
 
@@ -182,7 +182,7 @@ module GMRES_tools
             stat = mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE,1.0_dp,this%b_mat,this%descr,&
                                 x(1:n),0.0_dp,y(n+1:))
             stat = mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE,1.0_dp,this%a_mat,this%descr,&
-                                x(n+1:),1.0_dp,y(1:n))
+                                x(n+1:),1.0_dp,y(n+1:))
 
             ! call mkl_dcsrsymv('U',n,this%a,this%ia,this%ja,x_r,y_r)
             ! call mkl_dcsrsymv('U',n,this%b,this%ia,this%ja,x_i,temp)
