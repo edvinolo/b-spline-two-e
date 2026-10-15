@@ -27,7 +27,7 @@ contains
         ang = (-1)**(syms(1)%l-syms(1)%m)*three_j(syms(1)%l,1,syms(2)%l,-syms(1)%m,q,syms(2)%m)
         if ((abs(ang)<5.d-16).or.(.not.parity_allowed).or.(.not.compute)) then
             nnz = 0
-            call dip_block%init([syms(1)%n_config,syms(2)%n_config],nnz)
+            call dip_block%init([syms(1)%n_config,syms(2)%n_config],nnz,.true.)
             return
         end if
 
@@ -71,7 +71,7 @@ contains
         ang = (-1)**(syms(1)%l-syms(1)%m)*three_j(syms(1)%l,1,syms(2)%l,-syms(1)%m,q,syms(2)%m)
         if ((abs(ang)<5.d-16).or.(.not.parity_allowed).or.(.not.compute)) then
             nnz = 0
-            call dip_block%init([syms(1)%n_config,syms(2)%n_config],nnz)
+            call dip_block%init([syms(1)%n_config,syms(2)%n_config],nnz,.true.)
             return
         end if
 
@@ -121,7 +121,7 @@ contains
             end do
         end do
 
-        call dip_block%init([syms(1)%n_config,syms(2)%n_config],nnz)
+        call dip_block%init([syms(1)%n_config,syms(2)%n_config],nnz,.true.)
 
         ptr = 1
         do i=1,syms(1)%n_config
@@ -171,7 +171,7 @@ contains
             end do
         end do
 
-        call dip_block%init([syms(1)%n_config,syms(2)%n_config],nnz)
+        call dip_block%init([syms(1)%n_config,syms(2)%n_config],nnz,.true.)
 
         ptr = 1
         do i=1,syms(1)%n_config

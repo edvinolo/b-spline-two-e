@@ -168,10 +168,10 @@ contains
 
         call blocks%compute_shape()
         if (.not.CS%arrays_allocated()) then
-            call CS%init(blocks%shape,nnz)
+            call CS%init(blocks%shape,nnz,blocks%blocks(1,1)%full)
         else if ((CS%nnz /= nnz).or.(any(CS%shape /= blocks%shape))) then
             call CS%deall()
-            call CS%init(blocks%shape,nnz)
+            call CS%init(blocks%shape,nnz,blocks%blocks(1,1)%full)
         end if
 
         if (nnz /= 0) then
@@ -287,10 +287,10 @@ contains
 
         call blocks%compute_shape()
         if (.not.CS%arrays_allocated()) then
-            call CS%init(blocks%shape,nnz)
+            call CS%init(blocks%shape,nnz,blocks%blocks(1)%full)
         else if ((CS%nnz /= nnz).or.(any(CS%shape /= blocks%shape))) then
             call CS%deall()
-            call CS%init(blocks%shape,nnz)
+            call CS%init(blocks%shape,nnz,blocks%blocks(1)%full)
         end if
 
         if (nnz /= 0) then
@@ -401,6 +401,7 @@ contains
             do i = 1, this%block_shape(1)
                 write(1) this%blocks(i,j)%shape
                 write(1) this%blocks(i,j)%nnz
+                write(1) this%blocks(i,j)%full
 
                 if (this%blocks(i,j)%nnz > 0) then
                     write(1) this%blocks(i,j)%index_ptr
@@ -420,6 +421,7 @@ contains
 
         integer :: i,j
         integer :: nnz
+        logical :: full
         character(len=3) :: type
         integer, dimension(2) :: shape, block_shape
 
@@ -441,8 +443,9 @@ contains
             do i = 1, this%block_shape(1)
                 read(1) shape
                 read(1) nnz
+                read(1) full
 
-                call this%blocks(i,j)%init(shape,nnz)
+                call this%blocks(i,j)%init(shape,nnz,full)
 
                 if (this%blocks(i,j)%nnz > 0) then
                     read(1) this%blocks(i,j)%index_ptr
@@ -472,6 +475,7 @@ contains
         do i = 1, this%block_shape(1)
             write(1) this%blocks(i)%shape
             write(1) this%blocks(i)%nnz
+            write(1) this%blocks(i)%full
 
             if (this%blocks(i)%nnz > 0) then
                 write(1) this%blocks(i)%index_ptr
@@ -490,6 +494,7 @@ contains
 
         integer :: i
         integer :: nnz
+        logical :: full
         character(len=3) :: type
         integer, dimension(2) :: shape, block_shape
 
@@ -510,8 +515,9 @@ contains
         do i = 1, this%block_shape(1)
             read(1) shape
             read(1) nnz
+            read(1) full
 
-            call this%blocks(i)%init(shape,nnz)
+            call this%blocks(i)%init(shape,nnz,full)
 
             if (this%blocks(i)%nnz > 0) then
                 read(1) this%blocks(i)%index_ptr

@@ -197,10 +197,12 @@ contains
         !     !sol(i,:) = lu_values(diag_ptr(i))*sol(i,:)
         !     sol(:,i) = a%data(this%diag_ptr(i))*sol(:,i)
         ! end do
-        do i  = 1,nrhs
-            call mkl_zcsrtrsv('L','N','U',this%n,this%lu_val,a%index_ptr,a%indices,rhs(:,i),this%temp)
-            call mkl_zcsrtrsv('U','N','N',this%n,this%lu_val,a%index_ptr,a%indices,this%temp,sol(:,i))
-        end do
+
+        ! These routines are deprecated and should be replaced, but since ILU0 is not really used by the main code I just comment them out
+        ! do i  = 1,nrhs
+        !     call mkl_zcsrtrsv('L','N','U',this%n,this%lu_val,a%index_ptr,a%indices,rhs(:,i),this%temp)
+        !     call mkl_zcsrtrsv('U','N','N',this%n,this%lu_val,a%index_ptr,a%indices,this%temp,sol(:,i))
+        ! end do
         end associate
     end subroutine solve_ILU0_mat
 end module ILU0_tools

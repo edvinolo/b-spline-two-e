@@ -196,7 +196,7 @@ contains
         nnz = 0
 
         if (i_sym > j_sym) then
-            call H_block%init([syms(1)%n_config,syms(2)%n_config],nnz)
+            call H_block%init([syms(1)%n_config,syms(2)%n_config],nnz,.true.)
             return
         end if
 
@@ -210,7 +210,7 @@ contains
             end do
         end do
 
-        call H_block%init([syms(1)%n_config,syms(2)%n_config],nnz)
+        call H_block%init([syms(1)%n_config,syms(2)%n_config],nnz,.true.)
 
         ptr = 1
         H_block%index_ptr(1) = ptr
@@ -229,11 +229,12 @@ contains
 
     end subroutine shift_Coul_Ham_off_diag_block
 
-    subroutine shift_Coul_Ham_diag_block(sym_diag,i_sym,b_splines,H_block)
+    subroutine shift_Coul_Ham_diag_block(sym_diag,i_sym,b_splines,H_block,full)
         type(sym), intent(in) :: sym_diag
         integer, intent(in) :: i_sym
         type(b_spline), intent(in) :: b_splines
         type(CSR_matrix), intent(out) :: H_block
+        logical, intent(in) :: full
 
         integer :: nnz,ptr
         integer :: i,j,n_i,n_j
@@ -252,7 +253,7 @@ contains
             end do
         end do
 
-        call H_block%init([sym_diag%n_config,sym_diag%n_config],nnz)
+        call H_block%init([sym_diag%n_config,sym_diag%n_config],nnz,full)
 
 
         ptr = 1
@@ -273,7 +274,7 @@ contains
 
     end subroutine shift_Coul_Ham_diag_block
 
-    subroutine setup_shift_Coul_Ham(H_block,S_block,omega,shift,bas,CAP_c,k_GL,b_splines,B_subset)
+    subroutine setup_shift_Coul_Ham(H_block,S_block,omega,shift,bas,CAP_c,k_GL,b_splines,B_subset,full)
         type(block_CS), intent(out) :: H_block
         type(block_diag_CS), intent(in) :: S_block
         real(dp), intent(in) :: omega
@@ -283,6 +284,7 @@ contains
         integer, intent(in) :: k_GL
         type(b_spline), intent(in) :: b_splines
         logical, intent(in) :: B_subset
+        logical, intent(in) :: full
 
         integer :: i,j
         type(sym) :: syms(2)
@@ -296,7 +298,7 @@ contains
 
         ! Set diagonal blocks
         do i = 1,bas%n_sym
-            call shift_Coul_Ham_diag_block(bas%syms(i),i,b_splines,H_block%blocks(i,i))
+            call shift_Coul_Ham_diag_block(bas%syms(i),i,b_splines,H_block%blocks(i,i),full)
         end do
 
         ! Set off diagonal blocks

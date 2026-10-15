@@ -137,8 +137,8 @@ contains
         end if
 
         nnz = count_nnz(b_splines,term,max_k,full)
-        call H_sp%init([term%n_config,term%n_config],nnz(1))
-        call S_sp%init([term%n_config,term%n_config],nnz(2))
+        call H_sp%init([term%n_config,term%n_config],nnz(1),full)
+        call S_sp%init([term%n_config,term%n_config],nnz(2),full)
         row_ptr_H = 1
         row_ptr_S = 1
         H_sp%index_ptr(1) = 1
@@ -315,8 +315,8 @@ contains
         end if
 
         nnz = count_nnz_1p(b_splines,term,full)
-        call H_sp%init([term%n_config,term%n_config],nnz)
-        call S_sp%init([term%n_config,term%n_config],nnz)
+        call H_sp%init([term%n_config,term%n_config],nnz,full)
+        call S_sp%init([term%n_config,term%n_config],nnz,full)
         row_ptr = 1
         H_sp%index_ptr(1) = 1
         S_sp%index_ptr(1) = 1
