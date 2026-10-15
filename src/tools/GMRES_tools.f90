@@ -5,10 +5,13 @@ module GMRES_tools
     use sparse_array_tools, only: CSR_matrix,CSR_dsymv
     use precond_tools, only: block_PC,block_PQ_PC,block_Jacobi_PC
     use ILU0_tools, only: ILU0
+    use mkl_spblas
     use omp_lib, only: omp_get_wtime
     implicit none
 
     real(dp), allocatable :: x_r(:),x_i(:),y_r(:),y_i(:),temp(:)
+    integer :: stat
+    character(len=:), allocatable :: error_stat
 
     type, public :: zFGMRES
         integer :: n
@@ -26,6 +29,9 @@ module GMRES_tools
         complex(dp), allocatable :: zwork(:)
         integer :: ipar(128)
         real(dp) :: dpar(128)
+        type(matrix_descr) :: descr
+        type(sparse_matrix_t) :: a_mat
+        type(sparse_matrix_t) :: b_mat
     contains
         procedure :: setup => setup_zFGMRES
         procedure :: update => update_zFGMRES
@@ -75,9 +81,15 @@ module GMRES_tools
             this%full = full
             if (full) then
                 this%mv => gemv_zFGMRES
+                this%descr%type = SPARSE_MATRIX_TYPE_GENERAL
             else
                 this%mv => symv_zFGMRES
+                this%descr%type = SPARSE_MATRIX_TYPE_SYMMETRIC
+                this%descr%mode = SPARSE_FILL_MODE_UPPER
+                this%descr%diag = SPARSE_DIAG_NON_UNIT
             end if
+
+            this%n = C%shape(1)
 
             if (this%store) then
                 this%a = real(C%data,kind=dp)
@@ -88,9 +100,21 @@ module GMRES_tools
 
                 this%ja = C%indices
                 ! this%jb = C%indices
-            end if
 
-            this%n = C%shape(1)
+                stat = mkl_sparse_d_create_csr(this%a_mat,SPARSE_INDEX_BASE_ONE,this%n,this%n,&
+                        this%ia(1:this%n),this%ia(2:this%n+1),this%ja,this%a)
+                if (stat /= SPARSE_STATUS_SUCCESS) then
+                    write(error_stat,*) "create_csr failed: ", stat
+                    error stop error_stat
+                end if
+
+                stat = mkl_sparse_d_create_csr(this%b_mat,SPARSE_INDEX_BASE_ONE,this%n,this%n,&
+                        this%ia(1:this%n),this%ia(2:this%n+1),this%ja,this%b)
+                if (stat /= SPARSE_STATUS_SUCCESS) then
+                    write(error_stat,*) "create_csr failed: ", stat
+                    error stop error_stat
+                end if
+            end if
 
             if (.not.allocated(this%tmp)) then
                 allocate(this%tmp((2*this%max_iter+1)*2*this%n + this%max_iter*(this%max_iter+9)/2+1))
@@ -137,8 +161,8 @@ module GMRES_tools
             ! x_r = x(1:n)
             ! x_i = x(n+1:)
 
-            call dcopy(n,x(1:n),1,x_r,1)
-            call dcopy(n,x(n+1:),1,x_i,1)
+            ! call dcopy(n,x(1:n),1,x_r,1)
+            ! call dcopy(n,x(n+1:),1,x_i,1)
 
             ! ! Real part y_r = a*x_r - b*x_i
             ! call CSR_dsymv(n,this%a,this%ia,this%ja,1.0_dp,x(1:n),0.0_dp,y(1:n))
@@ -148,20 +172,32 @@ module GMRES_tools
             ! call CSR_dsymv(n,this%b,this%ia,this%ja,1.0_dp,x(1:n),0.0_dp,y(n+1:))
             ! call CSR_dsymv(n,this%a,this%ia,this%ja,1.0_dp,x(n+1:),1.0_dp,y(n+1:))
 
-            call mkl_dcsrsymv('U',n,this%a,this%ia,this%ja,x_r,y_r)
-            call mkl_dcsrsymv('U',n,this%b,this%ia,this%ja,x_i,temp)
-            ! y_r = y_r - temp
-            call daxpy(n,-1.0_dp,temp,1,y_r,1)
+            ! ! Real part y_r = a*x_r - b*x_i
+            stat = mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE,1.0_dp,this%a_mat,this%descr,&
+                                x(1:n),0.0_dp,y(n+1:))
+            stat = mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE,-1.0_dp,this%b_mat,this%descr,&
+                                x(n+1:),1.0_dp,y(1:n))
 
-            call mkl_dcsrsymv('U',n,this%a,this%ia,this%ja,x_i,y_i)
-            call mkl_dcsrsymv('U',n,this%b,this%ia,this%ja,x_r,temp)
-            ! y_i = y_i + temp
-            call daxpy(n,1.0_dp,temp,1,y_i,1)
+            ! ! Imaginary part y_i = b*x_r + a*x_i
+            stat = mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE,1.0_dp,this%b_mat,this%descr,&
+                                x(1:n),0.0_dp,y(n+1:))
+            stat = mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE,1.0_dp,this%a_mat,this%descr,&
+                                x(n+1:),1.0_dp,y(1:n))
 
-            ! y(1:n) = y_r
-            ! y(n+1:) = y_i
-            call dcopy(n,y_r,1,y(1:n),1)
-            call dcopy(n,y_i,1,y(n+1:),1)
+            ! call mkl_dcsrsymv('U',n,this%a,this%ia,this%ja,x_r,y_r)
+            ! call mkl_dcsrsymv('U',n,this%b,this%ia,this%ja,x_i,temp)
+            ! ! y_r = y_r - temp
+            ! call daxpy(n,-1.0_dp,temp,1,y_r,1)
+
+            ! call mkl_dcsrsymv('U',n,this%a,this%ia,this%ja,x_i,y_i)
+            ! call mkl_dcsrsymv('U',n,this%b,this%ia,this%ja,x_r,temp)
+            ! ! y_i = y_i + temp
+            ! call daxpy(n,1.0_dp,temp,1,y_i,1)
+
+            ! ! y(1:n) = y_r
+            ! ! y(n+1:) = y_i
+            ! call dcopy(n,y_r,1,y(1:n),1)
+            ! call dcopy(n,y_i,1,y(n+1:),1)
 
             ! !$omp parallel private(j)
             ! !$omp do
@@ -378,7 +414,19 @@ module GMRES_tools
         subroutine cleanup_zFGMRES(this)
             class(zFGMRES), intent(inout) :: this
 
-            if (this%store) deallocate(this%a,this%ia,this%ja,this%b)!,this%ib,this%jb)
+            if (this%store) then
+                stat = mkl_sparse_destroy(this%a_mat)
+                if (stat /= SPARSE_STATUS_SUCCESS) then
+                    write(error_stat,*) "mkl_sparse_destroy failed: ", stat
+                    error stop error_stat
+                end if
+                stat = mkl_sparse_destroy(this%b_mat)
+                if (stat /= SPARSE_STATUS_SUCCESS) then
+                    write(error_stat,*) "mkl_sparse_destroy failed: ", stat
+                    error stop error_stat
+                end if
+                deallocate(this%a,this%ia,this%ja,this%b)!,this%ib,this%jb)
+            end if
             deallocate(this%b_work,this%x_work,this%dwork,this%zwork,this%tmp)
         end subroutine cleanup_zFGMRES
 
