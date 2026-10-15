@@ -3,8 +3,12 @@ module sparse_array_tools
     use bspline_tools
     use stdlib_sorting, only: sort_index
     use stdlib_hashmaps, only: open_hashmap_type
+    use mkl_spblas
     use omp_lib, only: omp_get_wtime
     implicit none
+
+    integer :: mkl_stat
+    character(len=:), allocatable :: mkl_error_stat
 
     type, public :: sparse_4d
         integer :: nnz
@@ -66,6 +70,10 @@ module sparse_array_tools
         integer, dimension(:), allocatable :: indices
         integer, dimension(:), allocatable :: index_ptr
         double complex, dimension(:), allocatable :: data
+        logical :: full
+        type(sparse_matrix_t) :: a_mat
+        type(matrix_descr) :: descr
+        logical :: mkl_set = .false.
     contains
         procedure :: init => init_CS
         procedure :: enter => enter_CS
@@ -79,6 +87,8 @@ module sparse_array_tools
         procedure :: shift => shift_CS
         procedure :: shift_B => shift_B_CS
         procedure :: scale => scale_CS
+        procedure :: mkl_init => mkl_init_CS
+        procedure :: mkl_destroy => mkl_destroy_CS
         procedure, pass(B) :: assign_CS
         generic :: assignment(=) => assign_CS
         generic :: operator(*) => scalar_mult
@@ -555,18 +565,22 @@ contains
         end select
     end subroutine get_val_Nd_DOK
 
-    subroutine init_CS(this,shape,nnz)
+    subroutine init_CS(this,shape,nnz,full)
         class(CS_matrix), intent(inout) :: this
         integer, dimension(2), intent(in) ::  shape
         integer, intent(in) :: nnz
+        logical, intent(in) :: full
 
         this%shape = shape
         this%nnz = nnz
+        this%full = full
 
         if (nnz>0) then
             allocate(this%indices(nnz),this%index_ptr(this%ptr_size()),source = 0)
             allocate(this%data(nnz),source = dcmplx(0.d0,0.d0))
         end if
+
+        call this%mkl_init()
     end subroutine init_CS
 
     !> Subroutine that sets the data array components
@@ -621,9 +635,9 @@ contains
 
         !The way things are setup A is canonical (sorted) by default
         if (present(transp).and.transp) then
-            call A%init(this%shape([2,1]),this%nnz)
+            call A%init(this%shape([2,1]),this%nnz,this%full)
         else
-            call A%init(this%shape,this%nnz)
+            call A%init(this%shape,this%nnz,this%full)
         end if
 
         if (this%nnz == 0) return !Don't do anything if nnz = 0
@@ -726,6 +740,8 @@ contains
         if (allocated(this%indices)) deallocate(this%indices)
         if (allocated(this%data)) deallocate(this%data)
         this%nnz = 0
+
+        call this%mkl_destroy()
     end subroutine deall_CS
 
     subroutine store_CS(this,loc,type)
@@ -737,6 +753,7 @@ contains
         write(1) type
         write(1) this%shape
         write(1) this%nnz
+        write(1) this%full
         write(1) this%index_ptr
         write(1) this%indices
         write(1) this%data
@@ -767,6 +784,7 @@ contains
         read(1) type
         read(1) this%shape
         read(1) this%nnz
+        read(1) this%full
 
         call this%deall()
         allocate(this%index_ptr(this%ptr_size()),this%indices(this%nnz),this%data(this%nnz))
@@ -775,6 +793,8 @@ contains
         read(1) this%data
 
         close(1)
+
+        call this%mkl_init()
     end subroutine load_CS
 
     subroutine CSR_load(this,loc)
@@ -964,7 +984,7 @@ contains
                 end if
             end do
 
-            call C%init(this%shape,nnz)
+            call C%init(this%shape,nnz,this%full)
 
             ptr = 1
             C%index_ptr(1) = ptr
@@ -1025,6 +1045,46 @@ contains
         end if
     end subroutine scale_CS
 
+    subroutine mkl_init_CS(this)
+        class(CS_matrix), intent(inout) :: this
+
+        if (this%full) return
+
+        this%descr%type = SPARSE_MATRIX_TYPE_SYMMETRIC
+        this%descr%mode = SPARSE_FILL_MODE_UPPER
+        this%descr%diag = SPARSE_DIAG_NON_UNIT
+
+        select type(this)
+        type is(CSR_matrix)
+            mkl_stat = mkl_sparse_z_create_csr(this%a_mat,SPARSE_INDEX_BASE_ONE,this%shape(1),this%shape(2),&
+                        this%index_ptr(1:this%ptr_size()-1),this%index_ptr(2:),this%indices,this%data)
+        type is (CSC_matrix)
+            mkl_stat = mkl_sparse_z_create_csc(this%a_mat,SPARSE_INDEX_BASE_ONE,this%shape(1),this%shape(2),&
+                        this%index_ptr(1:this%ptr_size()-1),this%index_ptr(2:),this%indices,this%data)
+        end select
+
+        if (mkl_stat /= SPARSE_STATUS_SUCCESS) then
+            write(mkl_error_stat,*) "create_csr failed: ", mkl_stat
+            error stop mkl_error_stat
+        end if
+
+        this%mkl_set = .true.
+    end subroutine mkl_init_CS
+
+    subroutine mkl_destroy_CS(this)
+        class(CS_matrix), intent(inout) :: this
+
+        if (this%mkl_set) then
+            mkl_stat = mkl_sparse_destroy(this%a_mat)
+            if (mkl_stat /= SPARSE_STATUS_SUCCESS) then
+                write(mkl_error_stat,*) "mkl_sparse_destroy failed: ", mkl_stat
+                error stop mkl_error_stat
+            end if
+            this%mkl_set = .false.
+        end if
+
+    end subroutine mkl_destroy_CS
+
     elemental subroutine assign_CS(A,B)
         class(CS_matrix), intent(inout) :: A
         class(CS_matrix), intent(in) :: B
@@ -1032,6 +1092,7 @@ contains
         if (same_type_as(A,B)) then
             A%shape = B%shape
             A%nnz = B%nnz
+            A%full = B%full
 
             if (B%arrays_allocated()) then
                 A%index_ptr = B%index_ptr
@@ -1149,7 +1210,7 @@ contains
         complex(dp), intent(in) :: x(:)
         complex(dp), intent(out) :: y(:)
 
-        integer :: i,j
+        ! integer :: i,j
 
         if ((A%shape(2)/=size(x)).or.(A%shape(1)/=size(y))) then
             write(6,*) "Error! Incompatible array sizes in CSR_mv!"
@@ -1164,7 +1225,17 @@ contains
             return
         end if
 
-        call mkl_zcsrsymv('U',A%shape(1),A%data,A%index_ptr,A%indices,x,y)
+        ! call mkl_zcsrsymv('U',A%shape(1),A%data,A%index_ptr,A%indices,x,y)
+
+        if (.not.A%mkl_set) error stop "mkl_sparse not set"
+
+        mkl_stat = mkl_sparse_z_mv(SPARSE_OPERATION_NON_TRANSPOSE,cmplx(1.0,kind=dp),A%a_mat,A%descr,&
+                                x,cmplx(0.0_dp,kind=dp),y)
+
+        if (mkl_stat /= SPARSE_STATUS_SUCCESS) then
+            write(mkl_error_stat,*) "mkl_sparse_z_mv failed: ", mkl_stat
+            error stop mkl_error_stat
+        end if
 
         ! This is correct, but for large problems the omp reduction clause runs into stack problems
         ! !$omp parallel private(j)
