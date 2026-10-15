@@ -45,14 +45,14 @@ target_compile_options(project_options INTERFACE
     # GNU Fortran
     $<$<Fortran_COMPILER_ID:GNU>:
         -Wall
-        -cpp
-        -fdefault-integer-8>
+        -cpp>
+        # -fdefault-integer-8>
 
     # Intel ifx
     $<$<Fortran_COMPILER_ID:IntelLLVM>:
         -warn all
-        -fpp
-        -i8>
+        -fpp>
+        # -i8>
 )
 
 # Set flags for compilation choices
@@ -90,13 +90,27 @@ endif()
 find_package(OpenMP REQUIRED)
 target_link_libraries(project_options INTERFACE OpenMP::OpenMP_Fortran)
 
+# Find MPI
+# find_package(MPI REQUIRED)
+# target_link_libraries(project_options INTERFACE MPI::MPI_Fortran)
+
+# Find PETSc and SLEPc using pkg-config
+# set root of location to find PETSc's and SLEPc's pkg-config
+set(PETSC $ENV{PETSC_DIR}/$ENV{PETSC_ARCH})
+set(SLEPC $ENV{SLEPC_DIR}/$ENV{PETSC_ARCH})
+set(ENV{PKG_CONFIG_PATH} ${PETSC}/lib/pkgconfig:${SLEPC}/lib/pkgconfig)
+find_package(PkgConfig REQUIRED)
+pkg_search_module(PETSC REQUIRED IMPORTED_TARGET PETSc)
+pkg_search_module(SLEPC REQUIRED IMPORTED_TARGET SLEPc)
+target_link_libraries(project_options INTERFACE PkgConfig::PETSC PkgConfig::SLEPC)
+
 option(USE_DEBUG_PARDISO "Enable debugging mode of PARDISO" OFF)
 if (USE_DEBUG_PARDISO)
     add_compile_definitions(DEBUG_PARDISO)
 endif()
 
 # Tell MKL to use 32-bit integer interface
-# set(MKL_INTERFACE lp64)
+set(MKL_INTERFACE lp64)
 
 # Tell MKL to use GNU OpenMP
 # set(MKL_THREADING gnu_thread)
@@ -108,7 +122,7 @@ find_package(fortran_stdlib REQUIRED)
 find_package(arpackng REQUIRED)
 
 # Find BLAS and LAPACK, use MKL versions
-set(BLA_VENDOR Intel10_64ilp)
+set(BLA_VENDOR Intel10_64lp)
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
 

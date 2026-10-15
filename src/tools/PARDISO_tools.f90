@@ -127,7 +127,7 @@ contains
         write(6,*) ""
         write(6,*) "Performing PARDISO setup..."
         this%phase = 11 !Analysis
-        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
+        call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
               this%idum, this%nrhs, this%iparm, this%msglvl, this%ddum, this%ddum, this%error)
 
         if (this%error.ne.0) then
@@ -156,7 +156,7 @@ contains
         write(6,*) ""
         write(6,*) "Performing PARDISO setup..."
         this%phase = 11 !Analysis
-        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%a, ia, ja, &
+        call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%a, ia, ja, &
               this%idum, this%nrhs, this%iparm, this%msglvl, this%sdum, this%sdum, this%error)
 
         if (this%error.ne.0) then
@@ -179,7 +179,7 @@ contains
             this%phase = 22 !Numerical factorization
             this%first = .false.
         end if
-        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
+        call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
               this%idum, this%nrhs, this%iparm, this%msglvl, this%ddum, this%ddum, this%error)
         write(6,*) "Done!"
     end subroutine PARDISO_factor
@@ -200,7 +200,7 @@ contains
             this%phase = 22 !Numerical factorization
             this%first = .false.
         end if
-        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%a, ia, ja, &
+        call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%a, ia, ja, &
               this%idum, this%nrhs, this%iparm, this%msglvl, this%sdum, this%sdum, this%error)
         write(6,*) "Done!"
     end subroutine PARDISO_factor_sp
@@ -214,7 +214,7 @@ contains
         complex(dp), intent(inout) :: b(this%n)
 
         this%phase = 33 !Compute solution
-        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
+        call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, a, ia, ja, &
               this%idum, this%nrhs, this%iparm, this%msglvl, b, x, this%error)
 
         if (this%error.ne.0) then
@@ -236,7 +236,7 @@ contains
         this%b = real(b,kind=sp)
 
         this%phase = 33 !Compute solution
-        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%a, ia, ja, &
+        call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%a, ia, ja, &
               this%idum, this%nrhs, this%iparm, this%msglvl, this%b, this%x, this%error)
 
         if (this%error.ne.0) then
@@ -251,7 +251,7 @@ contains
         class(PARDISO_solver), intent(inout) :: this
 
         this%phase = -1 !Release internal memory for solver
-        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%ddum, this%idum, this%idum, &
+        call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%ddum, this%idum, this%idum, &
               this%idum, this%nrhs, this%iparm, this%msglvl, this%ddum, this%ddum, this%error)
 
         deallocate(this%pt,this%iparm)
@@ -262,7 +262,7 @@ contains
         class(PARDISO_solver_sp), intent(inout) :: this
 
         this%phase = -1 !Release internal memory for solver
-        call pardiso_64 (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%sdum, this%idum, this%idum, &
+        call pardiso (this%pt, this%maxfct, this%mnum, this%mtype, this%phase, this%n, this%sdum, this%idum, this%idum, &
               this%idum, this%nrhs, this%iparm, this%msglvl, this%sdum, this%sdum, this%error)
 
         deallocate(this%pt,this%iparm,this%a,this%x,this%b)

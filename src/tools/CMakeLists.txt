@@ -15,6 +15,7 @@ set(tool_files
     "PARDISO_tools.f90"
     "precond_tools.f90"
     "quad_tools.f90"
+    "SLEPc_tools.f90"
     "sparse_array_tools.f90"
     "wigner_tools.f90"
 )
