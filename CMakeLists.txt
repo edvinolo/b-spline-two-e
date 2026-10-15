@@ -122,11 +122,7 @@ if (USE_FEAST)
 endif()
 
 # Build the MKL sparse BLAS Fortran module from MKL's own source file
-set(MKL_MOD_DIR ${CMAKE_BINARY_DIR}/mkl_modules)
 add_library(mkl_spblas_mod OBJECT $ENV{MKLROOT}/include/mkl_spblas.f90)
-set_target_properties(mkl_spblas_mod PROPERTIES
-    Fortran_MODULE_DIRECTORY ${MKL_MOD_DIR})
-target_include_directories(mkl_spblas_mod INTERFACE ${MKL_MOD_DIR})
 target_link_libraries(mkl_spblas_mod PRIVATE project_options)
 
 # Add subdirectories
