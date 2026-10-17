@@ -43,7 +43,7 @@ cd $home_dir
 # Install GSL
 sudo yum install gsl-devel
 
-# Install intel Fortran essentials
+# Install Intel oneAPI Toolkit
 # Create repo file
 tee > /tmp/oneAPI.repo << EOF
 [oneAPI]
@@ -59,7 +59,7 @@ EOF
 sudo mv /tmp/oneAPI.repo /etc/yum.repos.d
 
 # Install
-sudo yum install intel-fortran-essentials
+sudo yum install intel-oneapi-toolkit
 
 # Set environment variables:
 source /opt/intel/oneapi/setvars.sh
